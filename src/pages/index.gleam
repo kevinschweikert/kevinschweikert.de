@@ -3,21 +3,26 @@
 import gleam/string_tree.{type StringTree}
 import gleam/list
 
+import post.{type Post}
 
-
-pub fn render_tree(posts posts: List(String)) -> StringTree {
+pub fn render_tree(posts posts: List(Post)) -> StringTree {
     let tree = string_tree.from_string("")
-    let tree = string_tree.append(tree, "# Kevin Schweikert
+    let tree = string_tree.append(tree, "---
+title = \"Kevin Schweikert\"
+---
+# Kevin Schweikert
 
-Hi! I'm Kevin Schweikert, a software engineer with a media technology background and a passion for neapolitan pizza.
+Hi! I'm Kevin Schweikert, a software engineer with a media technology background and a passion for neapolitan pizza 🍕
 
 ")
-    let tree = list.fold(posts, tree, fn(tree, link) {
+    let tree = list.fold(posts, tree, fn(tree, post) {
             let tree = string_tree.append(tree, "
 	- [")
-    let tree = string_tree.append(tree, link)
+    let tree = string_tree.append(tree, post.title)
+    let tree = string_tree.append(tree, " - ")
+    let tree = string_tree.append(tree, post.date)
     let tree = string_tree.append(tree, "](/posts/")
-    let tree = string_tree.append(tree, link)
+    let tree = string_tree.append(tree, post.slug)
     let tree = string_tree.append(tree, ".html)
 ")
 
@@ -33,7 +38,7 @@ Enum.sum([1,2,3])
     tree
 }
 
-pub fn render(posts posts: List(String)) -> String {
+pub fn render(posts posts: List(Post)) -> String {
     string_tree.to_string(render_tree(posts: posts))
 }
 

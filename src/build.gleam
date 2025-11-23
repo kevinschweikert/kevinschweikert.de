@@ -1,38 +1,52 @@
 import gleam/dict
 import gleam/io
 import gleam/list
+import tom
 
 // Some functions for rendering pages
-import pages/blog/post1
+import feed
+import layout
 import pages/index
+import post
+import render
+
+import glimra
+import glimra/theme
 
 // Import the static site generator
-import lustre/attribute
-import lustre/element
-import lustre/element/html.{body, head, html, link}
 import lustre/ssg
 import lustre/ssg/djot
 
-const catppuccin_styles_url = "https://cdn.jsdelivr.net/npm/@catppuccin/palette/css/catppuccin.css"
-
-const catppuccin_styles_checksum = "sha512-rostBe3y8SV6rNeApitsio4hw7OxN4yIdzrVdtbad5zUkoYk3+EicAFjt2zHsHC0LvxTuTFdRFWTbwokYPbDMg=="
-
 pub fn main() {
-  let posts = [
-    #("post-1", djot.render(post1.render(), djot.default_renderer())),
-  ]
+  let syntax_highlighter =
+    glimra.new_syntax_highlighter()
+    |> glimra.set_theme(theme.default_theme())
 
-  let post_links =
-    posts |> list.map(fn(post: #(String, List(element.Element(a)))) { post.0 })
+  let assert Ok(posts) = post.get_posts(syntax_highlighter)
+
+  let route_info =
+    list.map(posts, fn(post) { #(post.slug, post) })
+    |> dict.from_list()
+
+  let index_page = index.render(posts)
+  let assert Ok(index_metadata) = djot.metadata(index_page)
 
   let index =
-    root(djot.render(index.render(post_links), djot.default_renderer()))
+    layout.layout(djot.render(
+      index.render(posts),
+      render.custom_renderer(dict.new(), syntax_highlighter),
+    ))
+
+  let assert Ok(title) = tom.get_string(index_metadata, ["title"])
+  let feed = feed.build(title, posts)
 
   let build =
     ssg.new("./priv")
     |> ssg.add_static_route("/", index)
-    |> ssg.add_dynamic_route("/posts", posts |> dict.from_list(), root)
+    |> ssg.add_dynamic_route("/posts", route_info, layout.post_layout)
     |> ssg.add_static_dir("./assets")
+    |> ssg.add_static_xml("/feed", feed)
+    |> glimra.add_static_stylesheet(syntax_highlighter: syntax_highlighter)
     |> ssg.build
 
   case build {
@@ -42,20 +56,4 @@ pub fn main() {
       io.println("Build failed!")
     }
   }
-}
-
-fn root(elements) {
-  let head_content = [
-    link([
-      attribute.rel("stylesheet"),
-      attribute.href(catppuccin_styles_url),
-      attribute.attribute("integrity", catppuccin_styles_checksum),
-      attribute.crossorigin("anonymous"),
-    ]),
-    link([
-      attribute.rel("stylesheet"),
-      attribute.href("/app.css"),
-    ]),
-  ]
-  html([], [head([], head_content), body([attribute.class("page")], elements)])
 }

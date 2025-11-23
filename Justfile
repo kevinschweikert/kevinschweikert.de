@@ -3,3 +3,6 @@ compile_templates:
 
 build: compile_templates
     gleam run -m build
+
+watch:
+    git ls-files | entr -d just build
