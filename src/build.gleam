@@ -1,21 +1,18 @@
 import gleam/dict
 import gleam/io
 import gleam/list
-import tom
 
 // Some functions for rendering pages
 import feed
+import index
 import layout
-import pages/index
 import post
-import render
 
 import glimra
 import glimra/theme
 
 // Import the static site generator
 import lustre/ssg
-import lustre/ssg/djot
 
 pub fn main() {
   let syntax_highlighter =
@@ -28,17 +25,8 @@ pub fn main() {
     list.map(posts, fn(post) { #(post.slug, post) })
     |> dict.from_list()
 
-  let index_page = index.render(posts)
-  let assert Ok(index_metadata) = djot.metadata(index_page)
-
-  let index =
-    layout.layout(djot.render(
-      index.render(posts),
-      render.custom_renderer(dict.new(), syntax_highlighter),
-    ))
-
-  let assert Ok(title) = tom.get_string(index_metadata, ["title"])
-  let feed = feed.build(title, posts)
+  let index = layout.layout(index.render(posts))
+  let feed = feed.build(index.title(), posts)
 
   let build =
     ssg.new("./priv")

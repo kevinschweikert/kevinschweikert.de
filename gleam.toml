@@ -19,5 +19,5 @@ lustre_ssg = {path = "../ssg"}
 lustre = ">= 5.4.0 and < 6.0.0"
 simplifile = ">= 2.3.1 and < 3.0.0"
 glimra = {path = "../glimra"}
-tom = ">= 2.0.0 and < 3.0.0"
+tom = ">= 1.0.0 and < 3.0.0"
 gleam_time = ">= 1.6.0 and < 2.0.0"

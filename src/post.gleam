@@ -2,7 +2,8 @@ import gleam/int
 import gleam/list
 import gleam/result
 import gleam/string
-import gleam/time/calendar
+import lustre/attribute
+import lustre/element/html
 import render
 import tom
 
@@ -57,9 +58,20 @@ pub fn get_posts(highlighter) {
     date.year
     |> int.to_string()
     |> string.append("-")
-    |> string.append(date.month |> calendar.month_to_int() |> int.to_string())
+    // [TODO]: use line below when updated to tom >= 2.0.0
+    // |> string.append(date.month |> calendar.month_to_int() |> int.to_string())
+    |> string.append(date.month |> int.to_string())
     |> string.append("-")
     |> string.append(date.day |> int.to_string())
 
-  Ok(Post(slug:, title:, summary:, date:, elements:))
+  let post = Post(slug:, title:, summary:, date:, elements:) |> layout()
+  Ok(post)
+}
+
+fn layout(post: Post) -> Post {
+  let heading = html.h1([], [html.text(post.title)])
+  let datetime = attribute.attribute("datetime", post.date)
+  let date = html.time([datetime], [html.text(post.date)])
+
+  Post(..post, elements: [heading, date, ..post.elements])
 }

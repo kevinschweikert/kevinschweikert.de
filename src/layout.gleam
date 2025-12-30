@@ -15,9 +15,11 @@ const catppuccin_styles_checksum = "sha512-rostBe3y8SV6rNeApitsio4hw7OxN4yIdzrVd
 pub fn layout(elements) {
   let assert Ok(uri) = uri.parse("https://kevinschweikert.de")
   let og = [
+    // TODO: centralize description info
     opengraph.description(
       "Hi! I'm Kevin Schweikert, a software engineer with a media technology background and a passion for neapolitan pizza 🍕",
     ),
+    // TODO: centralize title info
     opengraph.title("Kevin Schweikert"),
     opengraph.url(uri),
     opengraph.website(),
@@ -38,9 +40,10 @@ pub fn post_layout(post: post.Post) {
 
 fn html(elements, additional_headers: option.Option(List(element.Element(Nil)))) {
   html.html([], [
-    head("Kevin Schweikerts Blog", option.None, additional_headers),
+    // TODO: centralize title info
+    head("Kevin Schweikert", option.None, additional_headers),
     html.body([attribute.class("page")], elements),
-    html.footer([], [html.text("hi rom")]),
+    html.footer([], []),
   ])
 }
 
@@ -55,6 +58,11 @@ fn head(title: String, _description: option.Option(String), additional_headers) 
     [
       html.title([], title),
       html.meta([attribute.attribute("charset", "utf-8")]),
+      // TODO: centralize author info
+      html.meta([
+        attribute.attribute("name", "author"),
+        attribute.attribute("content", "Kevin Schweikert"),
+      ]),
       html.meta([
         attribute.attribute("name", "viewport"),
         attribute.attribute("content", "width=device-width, initial-scale=1"),
