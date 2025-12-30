@@ -1,7 +1,4 @@
-compile_templates:
-    matcha
-
-build: compile_templates
+build:
     gleam run -m build
 
 watch:
