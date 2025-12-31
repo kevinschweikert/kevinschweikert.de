@@ -20,12 +20,14 @@
 }
 
 html, body {
-    font-family:  monospace;
+    font-family: monospace;
     margin: auto;
     overflow-x: clip;
     background-color: var(--base-color);
     min-height: 100dvh;
     display: flex;
     flex-direction: column;
-    width: var(--content-width);
+    width: min(var(--content-width), 100%);
+    box-sizing: border-box;
+    padding: 1rem;
 }
