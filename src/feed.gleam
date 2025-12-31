@@ -22,7 +22,7 @@ pub fn build(title: String, posts: List(post.Post)) {
           attribute.href("/posts/" <> post.slug),
         ]),
         atom.id([], "some id"),
-        atom.updated([], post.date),
+        atom.updated([], post.date |> post.date_to_string),
         atom.summary([], post.summary),
         atom.content(
           [],
