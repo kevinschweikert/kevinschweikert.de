@@ -12,9 +12,17 @@ pub fn render(posts: List(post.Post)) -> List(element.Element(a)) {
   let post_items = list.map(posts, post_item)
   [
     html.h1([], [html.text("Kevin Schweikert")]),
-    html.text(
-      "Hi! I'm Kevin Schweikert, a software engineer with a media technology background and a passion for neapolitan pizza 🍕",
-    ),
+    html.p([], [
+      html.text(
+        "Hi! I'm Kevin Schweikert, a software engineer with a media technology background and a passion for neapolitan pizza 🍕",
+      ),
+    ]),
+    html.p([], [
+      html.text(
+        "This site is work in progress and will soon show my first article.",
+      ),
+    ]),
+    html.h2([], [html.text("Articles")]),
     html.ul([], post_items),
   ]
 }
