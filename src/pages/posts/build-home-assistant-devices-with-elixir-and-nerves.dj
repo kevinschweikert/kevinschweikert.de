@@ -1,0 +1,484 @@
+---
+slug = "build-home-assistant-devices-with-elixir-and-nerves"
+summary = "Learn how to integrate Elixir applications and Nerves devices into Home Assistant using MQTT"
+title = "Build Home Assistant Devices with Elixir and Nerves"
+date = 2026-01-18
+draft = false
+---
+
+I love [Home Assistant](https://www.home-assistant.io/). I love that I can throw in all these devices from different manufacturers, display their data in a unified dashboard and write automations that combine devices never intended to know of each other. Like switching on Philips Hue lights when the IKEA door sensor opens, or turning on the switch of a power outlet to activate a dehumidifier when an Aqara humidity sensor reports high values.
+
+But wouldn't it be nice to integrate devices we built ourselves?
+
+I was working through the Book [Build a Weather Station with Elixir and Nerves](https://pragprog.com/titles/passweather/build-a-weather-station-with-elixir-and-nerves/) where the authors show how to integrate sensors for temperature, humidity, pressure and air quality to then collect the measurements on a [Nerves](https://nerves-project.org/). In the second part of the book, we learn how to create a Phoenix API to receive the measurements and how to set up Grafana to visualize them. This is extremely cool but still does not show all my other devices or let's me control them.
+
+So, last year I had the idea to combine the learnings from the book and my own Home Assistant journey and posted in the [Elixir Forum](https://elixirforum.com/t/nerves-home-assistant-integration/70920) my initial ideas on how to tackle this. 
+
+I've outlined three options on how to communicate and interact with Home Assistant.
+
+* [MQTT](https://www.home-assistant.io/integrations/mqtt)
+* [REST](https://developers.home-assistant.io/docs/api/rest) / [WebSocket API](https://developers.home-assistant.io/docs/api/websocket)
+* [Native Python integration](https://developers.home-assistant.io/docs/creating_component_index)
+
+I quickly discovered that you cannot create new entities via the REST/WebSocket API and that at least the first iteration should be all in Elixir instead of writing a whole new integration in Python. So I settled on MQTT.
+
+Before we start, I want to clarify some wording i'll be using:
+
+* `entity` - one thing you can see/control (switch, sensor, camera)
+* `device` - a thing (often physical) that groups entities (the Nerves weather station)
+* `integration` - the code that let's Home Assistant interact with a device/brand (MQTT, Zigbee, Unifi, ...)
+* `platform` - the entity type within an integration (switch, sensor, camera)
+
+## MQTT
+
+```
+[Elixir Application] <--> [MQTT Broker] <--> [Home Assistant]
+```
+
+To add our own entities, Home Assistant has a built-in [auto discovery mechanism](https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery) when using MQTT. There are different options like device or single component discovery but here's what we are doing.
+
+### Discovery
+
+Home Assistant listens on a pre-configured MQTT topic for a JSON payload which is the discovery message. The default topic is:
+
+```
+/homeassistant/device/[YOUR_DEVICE_ID]/config
+```
+
+and it expects a payload like this:
+
+```json
+{
+  "device": {
+    "name": "My Device",
+    "identifiers": [
+      "My Device"
+    ]
+  },
+  "origin": {
+    "name": "homex"
+  },
+  "components": {
+    "my_switch_44962374": {
+      "name": "my-switch",
+      "platform": "switch",
+      "unique_id": "my_switch_44962374",
+      "state_topic": "homex/switch/my_switch_44962374",
+      "command_topic": "homex/switch/my_switch_44962374/set"
+    }
+  }
+}
+```
+
+* *platform*: this is a common and required field for all components and lets Home Assistant know how to treat it and which configuration values to expect
+* *unique_id*: important when you want to have Home Assistant remember the component across restarts
+
+All other fields are dependent on the kind of platform. A detailed documentation can be found on the Home Assistant
+website, e.g. [MQTT Switch](https://www.home-assistant.io/integrations/switch.mqtt/)
+
+> Here, Home Assistant publishes commands to `state_topic`, and your app publishes updates to `command_topic`.
+
+### Client
+
+There are only a few MQTT clients in Elixir and i've settled on [`emqtt`](https://hex.pm/packages/emqtt) which is an Erlang library made by the [EMQX](https://www.emqx.com) folks. EMQX is a MQTT broker and the client seems actively developed. It is also the only one which supports MQTT 5.0. The only current thing to look out for are some native/[NIF](https://www.erlang.org/doc/system/nif.html) dependencies for [QUIC](https://developer.mozilla.org/en-US/docs/Glossary/QUIC) support which are hard to build on Nerves. But we can override if we want to when using the `git` dependency:
+
+```elixir
+# mix.exs
+
+def deps() do
+  ...
+  {:emqtt, github: "emqx/emqtt", system_env: [{"BUILD_WITHOUT_QUIC", "1"}]}
+end
+```
+
+## Building it
+
+The following examples focus on functionality and ignore error handling in the most places. If you want to jump to the finished version go to [Homex][]
+
+### Manager
+
+Let's create a [`GenServer`](https://hexdocs.pm/elixir/GenServer.html), creatively called `Homex.Manager` to handle the client life-cycle and discovery mechanism. Here we send an empty components payload on startup:
+
+```elixir
+# lib/manager.ex
+
+defmodule Homex.Manager do
+  use GenServer
+
+  def start_link(opts) do
+    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+  end
+  
+  @impl GenServer
+  def init(_opts) do
+    {:ok, emqtt_pid} = :emqtt.start_link(host: "localhost", user: "admin", password: "admin")
+    :ok = :emqtt.connect(emqtt_pid)
+
+    {:ok, emqtt_pid, {:continue, :discovery}}
+  end
+
+  @impl GenServer
+  def handle_continue(:discovery, emqtt_pid) do
+
+    # TODO: lookup entities to fill discovery components
+  
+    discovery_config = %{
+      device: %{name: "Homex", identifiers: ["Homex"]},
+      origin: %{name: "homex"},
+      components: %{}
+    }
+
+    payload = Jason.encode!(discovery_config)
+    :emqtt.publish(emqtt_pid, "/homeassistant/device/homex/config", payload)
+  end
+end
+```
+
+Now we need to know when entities are added or when they are removed. They need to somehow register themselves and let the manager know about them. This sounds like a job for the Elixir [`Registry`](https://hexdocs.pm/elixir/Registry.html) module. We can start a new Registry in our application and set the Manager as a listener, so that we get notified when an Entity registers itself there:
+
+```elixir
+{Registry,
+  name: Homex.SubscriptionRegistry,
+  keys: :duplicate,
+  listeners: [Homex.Manager]
+}
+```
+
+The keys will be the subscribe topics and we will receive the following events in `Homex.Manager`:
+
+```elixir
+# lib/manager.ex
+
+def handle_info({:register, _registry, topic, _pid, _value}, emqtt_pid) do
+  :emqtt.subscribe(emqtt_pid, topic)
+  {:noreply, emqtt_pid, {:continue, :discovery}}
+end
+
+def handle_info({:unregister, _registry, topic, _pid}, emqtt_pid) do
+  :emqtt.unsubscribe(emqtt_pid, topic)
+  {:noreply, emqtt_pid, {:continue, :discovery}}
+end
+```
+
+Perfect! Now we get notified when a new Entity registers itself and we subscribe to the requested topics. If a new message on the subscribed topics arrives, we have to delegate that message to the registered entities. We can make use of [`Registry.dispatch/4`](https://hexdocs.pm/elixir/Registry.html#dispatch/4) to implement our own PubSub mechanism:
+
+```elixir
+def handle_info({:publish, %{topic: topic, payload: payload}}, emqtt_pid) do
+  Registry.dispatch(Homex.SubscriptionRegistry, topic, fn registered ->
+    for {entity_pid, _value} <- registered do
+      send(entity_pid, {:message, topic, payload})
+    end
+  end)
+
+  {:noreply, emqtt_pid}
+end
+```
+
+We just need to give the future entities a way to publish new messages in return:
+
+```elixir
+# lib/manager.ex
+
+def publish(topic, message) do
+  GenServer.call(__MODULE__, {:publish, topic, message})
+end
+
+def handle_call({:publish, topic, message}, _from, emqtt_pid) do
+  payload = Jason.encode!(message)
+  result = :emqtt.publish(emqtt_pid, topic, payload)
+  {:reply, result, emqtt_pid}
+end
+```
+
+### Entity
+
+Almost done! Before we implement the real entities, we plan ahead and define a common interface for all future entity implementations:
+
+```elixir
+# lib/entity.ex
+
+defmodule Homex.Entity do
+  @callback unique_id() :: String.t()
+  @callback component() :: Map.t()
+end
+```
+
+Alright, final stretch! This is the base for our switch entity:
+
+```elixir
+# lib/entity/switch.ex
+
+defmodule Homex.Entity.Switch do
+  use GenServer
+
+  @name "My Switch"
+  @platform "switch"
+  @unique_id "my_switch_#{:erlang.phash2([@platform, __MODULE__])}"
+  @state_topic "/homex/switch/my_switch"
+  @command_topic "/homex/switch/my_switch/set"
+
+  def start_link(opts) do
+    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+  end
+  
+  @impl GenServer
+  def init(_opts) do
+    Registry.register(Homex.SubscriptionRegistry, @state_topic, __MODULE__)
+    {:ok, :off}
+  end
+
+  @impl GenServer
+  def handle_info({:message, @state_topic, payload}, state) do
+    case payload do
+      "ON" -> {:noreply, :on}
+      "OFF" -> {:noreply, :off}
+    end
+  end
+end
+```
+
+We defined a stable unique ID, registered our process in the registry and will handle a message on the state topic. We don't have to handle the command topic, because we will only write to it. Let's also implement the `Entity` behaviour, we defined earlier:
+
+```elixir
+# lib/entity/switch.ex
+
+@behaviour Homex.Entity
+
+def unique_id(), do: @unique_id
+
+def component() do
+  %{
+    name: @name,
+    platform: @platform,
+    unique_id: @unique_id,
+    state_topic: @state_topic,
+    command_topic: @command_topic
+  }
+end
+```
+
+This is enough to handle state updates from the Home Assistant side but we also want to manipulate the switch from our side. Let's define a public API and the necessary handlers:
+
+```elixir
+# lib/entity/switch.ex
+
+def toggle() do
+  GenServer.cast(__MODULE__, :toggle)
+end
+
+@impl GenServer
+def handle_cast(:toggle, :on) do
+  Homex.Manager.publish(@command_topic, "OFF")
+  {:noreply, :off}
+end
+
+def handle_cast(:toggle, :off) do
+  Homex.Manager.publish(@command_topic, "ON")
+  {:noreply, :on}
+end
+```
+
+We can start the `Homex.Manager` statically but the entities are more dynamic. So we will use a [`DynamicSupervisor`](https://hexdocs.pm/elixir/DynamicSupervisor.html). The supervisor can tell us which children are started. That's why we don't need a separate Registry to figure out which modules/components are started and should be included in the discovery message:
+
+```elixir
+{DynamicSupervisor, name: Homex.EntitySupervisor, strategy: :one_for_one}
+```
+
+This starts a new DynamicSupervisor with the strategy `:one_for_one` which only restarts the crashed process and no other children:
+
+```elixir
+# lib/manager.ex
+
+def add_entity(module) do
+  GenServer.call(__MODULE__, {:add_entity, module})  
+end
+
+def handle_call({:add_entity, module}, _from, emqtt_pid) do
+  {:ok, _pid} = DynamicSupervisor.start_child(Homex.EntitySupervisor, module)
+  {:reply, :ok, {:continue, :discovery}}
+end
+```
+
+And last but not least we can update our [`handle_continue/2`](https://hexdocs.pm/elixir/GenServer.html#c:handle_continue/2) function to send a full discovery message containing all supervised entities:
+
+```elixir
+  def handle_continue(:discovery, emqtt_pid) do
+    entities =
+      DynamicSupervisor.which_children(Homex.EntitySupervisor)
+      |> Enum.map(fn {_id, _pid, _type, modules} -> modules end)
+      |> List.flatten()
+
+    components =
+      for module <- entities, into: %{} do
+        {module.unique_id(), module.component()}
+      end
+  
+    discovery_config = %{
+      device: %{name: "Homex", identifiers: ["Homex"]},
+      origin: %{name: "homex"},
+      components: components
+    }
+
+    payload = Jason.encode!(discovery_config)
+    :emqtt.publish(emqtt_pid, "/homeassistant/device/homex/config", payload)
+  end
+```
+
+Let's try it out!
+
+```elixir
+1> Homex.Manager.start_link([])
+{:ok, _pid}
+2> Homex.Manager.add_entity(Homex.Entity.Switch)
+:ok
+3> Homex.Entity.Switch.toggle()
+:ok
+4> Homex.Entity.Switch.toggle()
+:ok
+```
+
+We should see the switch entity in Home Assistant and we can see that it gets toggled whenever we call `toggle/0` on the switch module.
+
+## Homex
+
+I am excited to tell you, that all the work above and more is already available as an Elixir library called [`homex`](https://hex.pm/packages/homex).
+
+> A bridge between Elixir and Home Assistant
+
+Homex takes care of
+
+* Autodiscovery
+* Supervision
+* Automatic Reconnection
+* Message deduplication
+* Timed measurements
+
+Be it a temperature sensor or a light switch. This makes it especially interesting for Nerves devices to integrate with some hardware directly but you can also use it to switch feature flags in your day to day Elixir application.
+
+### What can you build with it?
+
+Homex is just a generic framework to create and control entities in Home Assistant. Here are some ideas what you can build with it.
+
+* Weather station like in the book from the beginning
+* Surveillance camera with the Raspberry Pi Camera
+* Sensor hub for RF devices
+* Water management system - Measure water levels and control valves
+* Report application metrics
+
+But in the end it is only limited by the [supported MQTT platforms](https://www.home-assistant.io/integrations/?search=mqtt) and your imagination
+
+## Basic usage
+
+To create a new switch entity in Homex you define a new module using the `Homex.Entity.Switch` macro. After passing a name you can implement different callbacks as seen in the [docs](https://hexdocs.pm/homex/Homex.Entity.Switch.html). In this demo we restrict ourselves to
+
+* `handle_on/1`
+* `handle_off/1`
+
+These are called when you switch the light on or off from the Home Assistant side, either manually or via automations. Here we just print the received value to the console to see that it works:
+
+```elixir
+defmodule MySwitch do
+  use Homex.Entity.Switch, name: "my-switch"
+
+  def handle_on(entity) do
+    IO.puts("Switch turned on")
+    entity
+  end
+
+  def handle_off(entity) do
+    IO.puts("Switch turned off")
+    entity
+  end
+end
+```
+
+To expose the new entity to Home Assistant you have to set up a MQTT broker (see [Setting up a broker](https://www.home-assistant.io/integrations/mqtt/#setting-up-a-broker)) and tell Homex how to connect. This could look like this:
+
+```elixir
+config :homex,
+  broker: [
+    host: "localhost",
+    port: 1883,
+    username: "admin",
+    password: "admin"
+  ]
+```
+
+Finally we can start Homex and add the switch:
+
+```elixir
+Homex.start_link([])
+Homex.add_entity(MySwitch)
+```
+
+After that we can see the new entity in Home Assistant and some logs in our application when we toggle the switch on and off.
+
+![`MySwitch` in Home Assistant](/images/ha_my_switch.png)
+
+```text
+13:27:17.973 [info] added entity my-switch
+Switch turned on
+Switch turned off
+Switch turned on
+```
+
+> Typically you would start Homex in you supervision tree.
+
+> You can optionally specify a list of entities in the config and Homex will add them automatically on startup
+
+## More advanced use cases
+
+To store data in the process state we can use `put_private/3` and `get_private/2`. This can be a reference to a sensor or in this case the reader of a webcam. With this and some `image` magic we are able to stream pictures right into Home Assistant:
+
+```elixir
+defmodule MyCamera do
+  use Homex.Entity.Camera, 
+    name: "my-camera", 
+    image_encoding: "b64", 
+    update_interval: 1_000
+
+  def handle_init(entity) do
+    r = Xav.Reader.new!("C922 Pro Stream Webcam", device?: true)
+    entity |> put_private(:reader, r)
+  end
+
+  def handle_timer(entity) do
+    r = entity |> get_private(:reader)
+    {:ok, %Xav.Frame{} = frame} = Xav.Reader.next_frame(r)
+
+    {:ok, img} = Vix.Vips.Image.new_from_binary(frame.data, frame.width, frame.height, 3, :VIPS_FORMAT_UCHAR)
+
+    img = img |> Image.thumbnail!(200)
+    binary = img |> Image.write!(:memory, suffix: ".jpg") |> Base.encode64()
+
+    entity
+    |> set_image(binary)
+    |> set_attributes(%{width: Image.width(img), height: Image.height(img)})
+  end
+end
+```
+
+## Closing thoughts
+
+Playing around with home automation is fun. Playing around with Elixir is fun! Playing around with both of them is even more fun!
+
+Homex is still young and evolving. It works, but expect some breaking changes in the early versions. I've already received some feedback and these are the things i want to tackle next
+
+* Make entities more flexible to define them at runtime and allow multiple instances
+* Allow support for multiple logical devices, so a hub can expose and delegate devices
+* Add APIs to query the state of the entities
+* Optional [telemetry](https://hex.pm/packages/telemetry) hooks
+* Expand support for more MQTT platforms
+* Make using/building `emqtt` easier
+
+I’d also love to integrate Homex into existing projects, for example:
+
+* Nerves itself (system metrics)
+* [Soleil](https://hex.pm/packages/soleil)
+* [Govee lights](https://hex.pm/packages/govee_lights)
+
+> You event want to write your automations in Elixir? You're in luck - there's already an article on how to do exactly that [Writing Home Assistant automations using Genservers in Elixir](https://www.jonashietala.se/blog/2024/10/08/writing_home_assistant_automations_using_genservers_in_elixir) by Jonas Hietala.
+
+For the long term, [Matter](https://csa-iot.org/all-solutions/matter/) could be an option to not just support the Home Assistant use-case but integrate in the home automation hub of your choice. 
+
+Do you have ideas where Homex could improve or be used? [Let me know](/contact.html)
