@@ -1,3 +1,5 @@
+@import "https://cdn.jsdelivr.net/npm/@catppuccin/palette/css/catppuccin.css";
+
 :root {
   --content-width: 960px;
   font-size: 16px;
@@ -32,12 +34,20 @@ body {
   margin: auto;
   overflow-x: clip;
   background-color: var(--base-color);
+  color: var(--text-color);
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
   width: min(var(--content-width), 100%);
   box-sizing: border-box;
   padding: 1rem;
+}
+
+nav {
+  display: flex;
+  direction: row;
+  gap: 2rem;
+  margin-bottom: 2rem;
 }
 
 ul,
@@ -61,4 +71,8 @@ pre {
   padding-left: 1rem;
   font-size: 12pt;
   font-weight: 300;
+}
+
+time {
+  font-size: 10pt;
 }

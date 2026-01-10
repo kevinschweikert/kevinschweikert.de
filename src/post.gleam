@@ -63,7 +63,7 @@ pub fn get_posts(highlighter) {
 }
 
 fn layout(post: Post) -> Post {
-  let heading = html.h1([], [html.text(post.title)])
+  let title = html.h1([], [html.text(post.title)])
   let datetime =
     attribute.attribute(
       "datetime",
@@ -72,31 +72,37 @@ fn layout(post: Post) -> Post {
     )
   let date =
     html.time([datetime], [
+      html.text("Published on "),
       html.text(
         post.date
         |> date_to_string,
       ),
     ])
 
-  let back_to_home =
-    html.p([], [
-      html.a([attribute.href("/index.html")], [html.text("Back to Home")]),
-    ])
-
-  Post(..post, elements: [heading, back_to_home, date, ..post.elements])
+  Post(..post, elements: [title, date, ..post.elements])
 }
 
 pub fn date_to_string(date: calendar.Date) -> String {
   let day = date.day |> int.to_string() |> string.pad_start(2, "0")
+  let month_abbr = date.month |> to_month_abbr()
+  let year = date.year |> int.to_string()
 
-  let month =
-    date.month
-    |> calendar.month_to_int()
-    |> int.to_string()
-    |> string.pad_start(2, "0")
+  month_abbr <> " " <> day <> ", " <> year
+}
 
-  let year = date.year |> int.to_string() |> string.pad_start(2, "0")
-
-  [year, month, day]
-  |> string.join("-")
+fn to_month_abbr(month: calendar.Month) {
+  case month {
+    calendar.January -> "Jan"
+    calendar.February -> "Feb"
+    calendar.March -> "Mar"
+    calendar.April -> "Apr"
+    calendar.May -> "May"
+    calendar.June -> "Jun"
+    calendar.July -> "Jul"
+    calendar.August -> "Aug"
+    calendar.September -> "Sep"
+    calendar.October -> "Oct"
+    calendar.November -> "Nov"
+    calendar.December -> "Dec"
+  }
 }

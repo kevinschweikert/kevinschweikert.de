@@ -3,6 +3,9 @@ import gleam/dict
 import gleam/io
 import gleam/list
 import gleam/result
+import pages
+import simplifile
+import sitemap
 
 // Some functions for rendering pages
 import feed
@@ -37,12 +40,23 @@ pub fn main() {
     |> list.map(fn(post) { #(post.slug, post) })
     |> dict.from_list()
 
-  let index = layout.layout(index.render(posts))
+  let index = posts |> index.render() |> layout.layout()
+  let about = pages.from_file("about.dj") |> layout.layout()
+  let contact = pages.from_file("contact.dj") |> layout.layout()
+  let uses = pages.from_file("uses.dj") |> layout.layout()
+  let now = pages.from_file("now.dj") |> layout.layout()
   let feed = feed.build(index.title(), posts)
+
+  let assert Ok(Nil) =
+    sitemap.build(posts) |> simplifile.write("./assets/sitemap.xml", _)
 
   let build =
     ssg.new("./priv")
     |> ssg.add_static_route("/", index)
+    |> ssg.add_static_route("/about", about)
+    |> ssg.add_static_route("/contact", contact)
+    |> ssg.add_static_route("/uses", uses)
+    |> ssg.add_static_route("/now", now)
     |> ssg.add_dynamic_route("/posts", route_info, layout.post_layout)
     |> ssg.add_static_dir("./assets")
     |> ssg.add_static_xml("/feed", feed)

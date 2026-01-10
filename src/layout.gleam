@@ -8,10 +8,6 @@ import lustre/element/html
 import lustre/ssg/opengraph
 import post
 
-const catppuccin_styles_url = "https://cdn.jsdelivr.net/npm/@catppuccin/palette/css/catppuccin.css"
-
-const catppuccin_styles_checksum = "sha512-rostBe3y8SV6rNeApitsio4hw7OxN4yIdzrVdtbad5zUkoYk3+EicAFjt2zHsHC0LvxTuTFdRFWTbwokYPbDMg=="
-
 pub fn layout(elements) {
   let assert Ok(uri) = uri.parse("https://kevinschweikert.de")
   let og = [
@@ -42,8 +38,19 @@ fn html(elements, additional_headers: option.Option(List(element.Element(Nil))))
   html.html([], [
     // TODO: centralize title info
     head("Kevin Schweikert", option.None, additional_headers),
-    html.body([attribute.class("page")], elements),
-    html.footer([], []),
+    html.body([], [
+      html.header([], [
+        html.nav([], [
+          html.a([attribute.href("/index.html")], [html.text("Home")]),
+          html.a([attribute.href("/about.html")], [html.text("About")]),
+          html.a([attribute.href("/contact.html")], [html.text("Contact")]),
+          html.a([attribute.href("/now.html")], [html.text("Now")]),
+          html.a([attribute.href("/uses.html")], [html.text("Uses")]),
+        ]),
+      ]),
+      html.main([attribute.class("page")], elements),
+      html.footer([], []),
+    ]),
   ])
 }
 
@@ -80,12 +87,6 @@ fn head(title: String, _description: option.Option(String), additional_headers) 
       html.meta([
         attribute.attribute("name", "viewport"),
         attribute.attribute("content", "width=device-width, initial-scale=1"),
-      ]),
-      html.link([
-        attribute.rel("stylesheet"),
-        attribute.href(catppuccin_styles_url),
-        attribute.attribute("integrity", catppuccin_styles_checksum),
-        attribute.crossorigin("anonymous"),
       ]),
       html.link([
         attribute.rel("stylesheet"),

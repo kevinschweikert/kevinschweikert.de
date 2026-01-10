@@ -26,11 +26,6 @@ pub fn render(posts: List(post.Post)) -> List(element.Element(a)) {
         "Hi! I'm Kevin Schweikert, a software engineer with a media technology background and a passion for neapolitan pizza 🍕",
       ),
     ]),
-    html.p([], [
-      html.text(
-        "This site is work in progress and will soon be filled with all the stuff i want to talk about.",
-      ),
-    ]),
     html.h2([], [html.text("Articles")]),
     html.div([], [
       {
@@ -43,7 +38,7 @@ pub fn render(posts: List(post.Post)) -> List(element.Element(a)) {
         html.ol([], {
           use #(year, posts) <- list.map(posts_by_year)
           html.li([], [
-            html.h2([], [html.text(int.to_string(year))]),
+            html.h3([], [html.text(int.to_string(year))]),
             post_list(posts),
           ])
         })

@@ -4,3 +4,5 @@
 erl_crash.dump
 /priv
 codebook.toml
+*.typ
+*.pdf
