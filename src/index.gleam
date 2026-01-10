@@ -1,3 +1,4 @@
+import gleam/bool
 import gleam/dict
 import gleam/int
 import gleam/list
@@ -27,17 +28,27 @@ pub fn render(posts: List(post.Post)) -> List(element.Element(a)) {
     ]),
     html.p([], [
       html.text(
-        "This site is work in progress and will soon show my first article.",
+        "This site is work in progress and will soon be filled with all the stuff i want to talk about.",
       ),
     ]),
     html.h2([], [html.text("Articles")]),
-    html.ol([], {
-      use #(year, posts) <- list.map(posts_by_year)
-      html.li([], [
-        html.h2([], [html.text(int.to_string(year))]),
-        post_list(posts),
-      ])
-    }),
+    html.div([], [
+      {
+        use <- bool.guard(
+          posts == [],
+          html.p([], [
+            html.text("Sorry, no Articles yet. Check in again soon!"),
+          ]),
+        )
+        html.ol([], {
+          use #(year, posts) <- list.map(posts_by_year)
+          html.li([], [
+            html.h2([], [html.text(int.to_string(year))]),
+            post_list(posts),
+          ])
+        })
+      },
+    ]),
   ]
 }
 
@@ -60,6 +71,7 @@ fn post_item(post: post.Post) -> element.Element(a) {
     html.a([attribute.href("/posts/" <> post.slug <> ".html")], [
       html.text(post.title),
     ]),
+    html.p([attribute.class("summary")], [html.text(post.summary)]),
   ])
 }
 

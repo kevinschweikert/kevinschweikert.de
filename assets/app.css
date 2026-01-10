@@ -28,6 +28,7 @@
 html,
 body {
   font-family: monospace;
+  font-size: 14pt;
   margin: auto;
   overflow-x: clip;
   background-color: var(--base-color);
@@ -44,4 +45,19 @@ ol,
 dl {
   list-style-type: none;
   padding-left: 0;
+}
+
+img {
+  display: block;
+  margin: 0 auto;
+}
+
+pre {
+  overflow-x: scroll
+}
+
+.summary {
+  padding-left: 1rem;
+  font-size: 12pt;
+  font-weight: 300;
 }

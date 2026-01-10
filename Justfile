@@ -1,5 +1,8 @@
 build:
     gleam run -m build
 
+dev:
+    BLOG_ENV=dev gleam run -m build
+
 watch:
-    git ls-files | entr -d just build
+    find src/ build/ assets/ | entr -d just dev

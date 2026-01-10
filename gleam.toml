@@ -21,3 +21,4 @@ simplifile = ">= 2.3.1 and < 3.0.0"
 glimra = {git = "git@github.com:kevinschweikert/glimra.git", ref = "ks/update-deps"}
 tom = ">= 2.0.0 and < 3.0.0"
 gleam_time = ">= 1.6.0 and < 2.0.0"
+envoy = ">= 1.1.0 and < 2.0.0"

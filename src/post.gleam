@@ -15,6 +15,7 @@ import simplifile
 
 pub type Post {
   Post(
+    draft: Bool,
     slug: String,
     title: String,
     date: calendar.Date,
@@ -51,12 +52,13 @@ pub fn get_posts(highlighter) {
     |> result.map_error(ParseError),
   )
 
+  let assert Ok(draft) = tom.get_bool(metadata, ["draft"])
   let assert Ok(title) = tom.get_string(metadata, ["title"])
   let assert Ok(slug) = tom.get_string(metadata, ["slug"])
   let assert Ok(summary) = tom.get_string(metadata, ["summary"])
   let assert Ok(date) = tom.get_date(metadata, ["date"])
 
-  let post = Post(slug:, title:, summary:, date:, elements:) |> layout()
+  let post = Post(draft:, slug:, title:, summary:, date:, elements:) |> layout()
   Ok(post)
 }
 
@@ -76,7 +78,12 @@ fn layout(post: Post) -> Post {
       ),
     ])
 
-  Post(..post, elements: [heading, date, ..post.elements])
+  let back_to_home =
+    html.p([], [
+      html.a([attribute.href("/index.html")], [html.text("Back to Home")]),
+    ])
+
+  Post(..post, elements: [heading, back_to_home, date, ..post.elements])
 }
 
 pub fn date_to_string(date: calendar.Date) -> String {

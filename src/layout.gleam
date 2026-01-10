@@ -58,6 +58,20 @@ fn head(title: String, _description: option.Option(String), additional_headers) 
     [
       html.title([], title),
       html.meta([attribute.attribute("charset", "utf-8")]),
+      html.script(
+        [
+          attribute.attribute("async", "true"),
+          attribute.src(
+            "https://plausible.kevinschweikert.de/js/pa-Xjy2lqLyTD7zfUCRDjM3k.js",
+          ),
+        ],
+        "",
+      ),
+      html.script(
+        [],
+        "window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+  plausible.init()",
+      ),
       // TODO: centralize author info
       html.meta([
         attribute.attribute("name", "author"),

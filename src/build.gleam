@@ -1,6 +1,8 @@
+import envoy
 import gleam/dict
 import gleam/io
 import gleam/list
+import gleam/result
 
 // Some functions for rendering pages
 import feed
@@ -15,14 +17,24 @@ import glimra/theme
 import lustre/ssg
 
 pub fn main() {
+  let blog_env = envoy.get("BLOG_ENV") |> result.unwrap("PROD")
+  let show_draft = case blog_env {
+    "PROD" | "prod" -> False
+    _ -> True
+  }
+
   let syntax_highlighter =
     glimra.new_syntax_highlighter()
     |> glimra.set_theme(theme.default_theme())
 
-  let assert Ok(posts) = post.get_posts(syntax_highlighter)
+  // TODO: don't hide error as empty list
+  let posts = post.get_posts(syntax_highlighter) |> result.unwrap([])
+  let posts =
+    posts |> list.filter(fn(post) { post.draft == False || show_draft })
 
   let route_info =
-    list.map(posts, fn(post) { #(post.slug, post) })
+    posts
+    |> list.map(fn(post) { #(post.slug, post) })
     |> dict.from_list()
 
   let index = layout.layout(index.render(posts))
