@@ -59,27 +59,27 @@ fn posts_by_date(post_a: post.Post, post_b: post.Post) -> order.Order {
 
 fn post_item(post: post.Post) -> element.Element(a) {
   html.li([], [
-    html.div([attribute.class("flex flex-col")], [
-      html.a(
-        [
-          attribute.class("font-bold"),
-          attribute.href("/posts/" <> post.slug <> ".html"),
-        ],
-        [
-          html.text(post.title),
-        ],
-      ),
+    html.a(
+      [
+        attribute.class("font-bold text-lg"),
+        attribute.href("/posts/" <> post.slug <> ".html"),
+      ],
+      [
+        html.text(post.title),
+      ],
+    ),
+    html.p([attribute.class("text-sm mt-0")], [
       html.time(
         [
-          attribute.class("text-xs"),
           attribute.attribute("datetime", date_to_string(post.date)),
         ],
         [
           html.text(abbr_post_date(post)),
         ],
       ),
+      html.text(" · "),
+      html.text(post.summary),
     ]),
-    html.p([attribute.class("text-sm")], [html.text(post.summary)]),
   ])
 }
 
