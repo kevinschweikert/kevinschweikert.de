@@ -3,6 +3,7 @@ import gleam/dict
 import gleam/int
 import gleam/list
 import gleam/order
+import gleam/string
 import gleam/time/calendar
 import lustre/attribute
 import lustre/element
@@ -20,7 +21,7 @@ pub fn render(posts: List(post.Post)) -> List(element.Element(a)) {
     |> dict.to_list()
     |> list.sort(fn(a, b) { int.compare(b.0, a.0) })
   [
-    html.h1([], [html.text("Kevin Schweikert")]),
+    html.h1([], [html.text("kevinschweikert.de")]),
     html.p([], [
       html.text(
         "Hi! I'm Kevin Schweikert, a software engineer with a media technology background and a passion for neapolitan pizza 🍕",
@@ -35,7 +36,7 @@ pub fn render(posts: List(post.Post)) -> List(element.Element(a)) {
             html.text("Sorry, no Articles yet. Check in again soon!"),
           ]),
         )
-        html.ol([], {
+        html.ol([attribute.class("list-none ps-0")], {
           use #(year, posts) <- list.map(posts_by_year)
           html.li([], [
             html.h3([], [html.text(int.to_string(year))]),
@@ -49,7 +50,7 @@ pub fn render(posts: List(post.Post)) -> List(element.Element(a)) {
 
 fn post_list(posts: List(post.Post)) -> element.Element(a) {
   let posts = posts |> list.sort(posts_by_date)
-  html.ol([], list.map(posts, post_item))
+  html.ol([attribute.class("list-none ps-0")], list.map(posts, post_item))
 }
 
 fn posts_by_date(post_a: post.Post, post_b: post.Post) -> order.Order {
@@ -58,16 +59,37 @@ fn posts_by_date(post_a: post.Post, post_b: post.Post) -> order.Order {
 
 fn post_item(post: post.Post) -> element.Element(a) {
   html.li([], [
-    html.time(
-      [attribute.attribute("datetime", post.date_to_string(post.date))],
-      [html.text(abbr_post_date(post))],
-    ),
-    html.text(" "),
-    html.a([attribute.href("/posts/" <> post.slug <> ".html")], [
-      html.text(post.title),
+    html.div([attribute.class("flex flex-col")], [
+      html.a(
+        [
+          attribute.class("font-bold"),
+          attribute.href("/posts/" <> post.slug <> ".html"),
+        ],
+        [
+          html.text(post.title),
+        ],
+      ),
+      html.time(
+        [
+          attribute.class("text-xs"),
+          attribute.attribute("datetime", date_to_string(post.date)),
+        ],
+        [
+          html.text(abbr_post_date(post)),
+        ],
+      ),
     ]),
-    html.p([attribute.class("summary")], [html.text(post.summary)]),
+    html.p([attribute.class("text-sm")], [html.text(post.summary)]),
   ])
+}
+
+fn date_to_string(date: calendar.Date) -> String {
+  [
+    date.day |> int.to_string(),
+    date.month |> calendar.month_to_int() |> int.to_string(),
+    date.year |> int.to_string(),
+  ]
+  |> string.join("-")
 }
 
 fn abbr_post_date(post: post.Post) -> String {

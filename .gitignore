@@ -1,3 +1,7 @@
+node_modules/
+assets/fonts/
+assets/style.css
+assets/sitemap.xml
 *.beam
 *.ez
 /build

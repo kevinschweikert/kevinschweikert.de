@@ -2,6 +2,7 @@ build:
     gleam run -m build
 
 dev:
+    npm run build
     BLOG_ENV=dev gleam run -m build
 
 watch:

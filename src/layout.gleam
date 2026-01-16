@@ -38,19 +38,81 @@ fn html(elements, additional_headers: option.Option(List(element.Element(Nil))))
   html.html([attribute.lang("en")], [
     // TODO: centralize title info
     head("Kevin Schweikert", option.None, additional_headers),
-    html.body([], [
-      html.header([], [
-        html.nav([], [
-          html.a([attribute.href("/index.html")], [html.text("Home")]),
-          html.a([attribute.href("/about.html")], [html.text("About")]),
-          html.a([attribute.href("/contact.html")], [html.text("Contact")]),
-          html.a([attribute.href("/now.html")], [html.text("Now")]),
-          html.a([attribute.href("/uses.html")], [html.text("Uses")]),
+    html.body(
+      [
+        attribute.class(
+          "flex flex-col items-center bg-ctp-base text-ctp-text p-4 h-screen",
+        ),
+      ],
+      [
+        html.header([], [
+          html.nav(
+            [
+              attribute.class(
+                "flex flex-row gap-4 wrap mb-4 font-bold text-ctp-blue-900 dark:text-ctp-blue-200",
+              ),
+            ],
+            [
+              html.a([attribute.href("/index.html")], [html.text("Home")]),
+              html.a([attribute.href("/about.html")], [html.text("About")]),
+              html.a([attribute.href("/contact.html")], [html.text("Contact")]),
+              html.a([attribute.href("/now.html")], [html.text("Now")]),
+              html.a([attribute.href("/uses.html")], [html.text("Uses")]),
+            ],
+          ),
         ]),
-      ]),
-      html.main([attribute.class("page")], elements),
-      html.footer([], []),
-    ]),
+        html.main(
+          [
+            attribute.class(
+              "flex-1 min-w-0 w-full max-w-prose mx-auto prose dark:prose-invert prose-catppuccin prose-img:rounded-lg  prose-a:no-underline prose-a:hover:underline prose-pre:text-ctp-base dark:prose-pre:text-ctp-text",
+            ),
+          ],
+          elements,
+        ),
+        html.footer(
+          [
+            attribute.class(
+              "text-sm mt-4 p-1 flex flex-col items-center gap-2 ",
+            ),
+          ],
+          [
+            html.p([], [
+              html.text("Built with "),
+              html.a(
+                [
+                  attribute.href(
+                    "https://github.com/kevinschweikert/kevinschweikert.de",
+                  ),
+                ],
+                [html.text("♥︎")],
+              ),
+              html.text(", "),
+              html.a([attribute.href("https://gleam.run/")], [
+                html.text("Gleam"),
+              ]),
+              html.text(" and "),
+              html.a([attribute.href("https://github.com/lustre-labs/ssg")], [
+                html.text("Lustre"),
+              ]),
+            ]),
+            html.p([attribute.class("text-xs")], [
+              html.text("Found an error? Have suggestions? "),
+              html.a(
+                [
+                  attribute.class(
+                    "hover:underline text-ctp-blue-900 dark:text-ctp-blue-100",
+                  ),
+                  attribute.href(
+                    "https://github.com/kevinschweikert/kevinschweikert.de/issues",
+                  ),
+                ],
+                [html.text("Open an issue")],
+              ),
+            ]),
+          ],
+        ),
+      ],
+    ),
   ])
 }
 
@@ -99,8 +161,13 @@ fn head(title: String, _description: option.Option(String), additional_headers) 
         attribute.attribute("content", "width=device-width, initial-scale=1"),
       ]),
       html.link([
+        attribute.rel("icon"),
+        attribute.attribute("type", "image/svg+xml"),
+        attribute.href("/favicon.svg"),
+      ]),
+      html.link([
         attribute.rel("stylesheet"),
-        attribute.href("/app.css"),
+        attribute.href("/style.css"),
       ]),
       glimra.link_static_stylesheet(),
     ]

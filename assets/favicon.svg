@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-label="KS">
+  <circle cx="64" cy="64" r="60" fill="#1e1e2e"/>
+  <circle cx="64" cy="64" r="60" fill="none" stroke="#cba6f7" stroke-width="4"/>
+  <text x="64" y="84" font-size="64" text-anchor="middle" fill="#cdd6f4">
+    KS
+  </text>
+</svg>

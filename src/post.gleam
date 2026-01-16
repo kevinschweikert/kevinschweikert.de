@@ -71,7 +71,7 @@ fn layout(post: Post) -> Post {
         |> date_to_string,
     )
   let date =
-    html.time([datetime], [
+    html.time([attribute.class("text-sm"), datetime], [
       html.text("Published on "),
       html.text(
         post.date
@@ -79,30 +79,13 @@ fn layout(post: Post) -> Post {
       ),
     ])
 
-  Post(..post, elements: [title, date, ..post.elements])
+  Post(..post, elements: [html.article([], [title, date, ..post.elements])])
 }
 
 pub fn date_to_string(date: calendar.Date) -> String {
   let day = date.day |> int.to_string() |> string.pad_start(2, "0")
-  let month_abbr = date.month |> to_month_abbr()
+  let month = date.month |> calendar.month_to_string()
   let year = date.year |> int.to_string()
 
-  month_abbr <> " " <> day <> ", " <> year
-}
-
-fn to_month_abbr(month: calendar.Month) {
-  case month {
-    calendar.January -> "Jan"
-    calendar.February -> "Feb"
-    calendar.March -> "Mar"
-    calendar.April -> "Apr"
-    calendar.May -> "May"
-    calendar.June -> "Jun"
-    calendar.July -> "Jul"
-    calendar.August -> "Aug"
-    calendar.September -> "Sep"
-    calendar.October -> "Oct"
-    calendar.November -> "Nov"
-    calendar.December -> "Dec"
-  }
+  month <> " " <> day <> ", " <> year
 }

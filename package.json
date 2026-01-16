@@ -1,0 +1,30 @@
+{
+  "name": "kevinschweikert.de",
+  "version": "1.0.0",
+  "description": "The source code for my personal blog at [kevinschweikert.de](https://kevinschweikert.de)",
+  "author": "Kevin Schweikert",
+  "devDependencies": {
+    "@catppuccin/tailwindcss": "^1.0.0",
+    "@fontsource/maple-mono": "^5.2.6",
+    "@fontsource/nunito": "^5.2.7",
+    "@tailwindcss/cli": "^4.1.18",
+    "@tailwindcss/typography": "^0.5.19",
+    "tailwindcss": "^4.1.18"
+  },
+  "scripts": {
+    "fonts:dir": "mkdir -p assets/fonts",
+
+    "fonts:nunito:400": "cp node_modules/@fontsource/nunito/files/nunito-latin-400-normal.woff2 assets/fonts/",
+    "fonts:nunito:600": "cp node_modules/@fontsource/nunito/files/nunito-latin-600-normal.woff2 assets/fonts/",
+    "fonts:nunito:700": "cp node_modules/@fontsource/nunito/files/nunito-latin-700-normal.woff2 assets/fonts/",
+    "fonts:nunito:800": "cp node_modules/@fontsource/nunito/files/nunito-latin-800-normal.woff2 assets/fonts/",
+
+    "fonts:maple-mono:400": "cp node_modules/@fontsource/maple-mono/files/maple-mono-latin-400-normal.woff2 assets/fonts/",
+
+    "copy-nunito": "npm run fonts:nunito:400 && npm run fonts:nunito:600 && npm run fonts:nunito:700 && npm run fonts:nunito:800",
+    "copy-maple-mono": "npm run fonts:maple-mono:400",
+    "copy-fonts": "npm run fonts:dir && npm run copy-nunito && npm run copy-maple-mono",
+
+    "build": "tailwindcss -i assets/app.css -o assets/style.css"
+  }  
+}

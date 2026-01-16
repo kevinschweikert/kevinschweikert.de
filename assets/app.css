@@ -1,86 +1,107 @@
-/* @import "https://cdn.jsdelivr.net/npm/@catppuccin/palette/css/catppuccin.css"; */
-
-:root {
-  --content-width: 960px;
-  --ctp-latte-text: #4c4f69;
-  --ctp-latte-base: #eff1f5;
-  --ctp-latte-crust: #dce0e8;
-  --ctp-frappe-mantle: #292c3c;
-  --ctp-mocha-text: #cdd6f4;
-  --ctp-mocha-base: #1e1e2e;
-  --ctp-mocha-mantle: #181825;
-  --ctp-mocha-crust: #11111b;
-  font-size: 16px;
+@font-face {
+  font-family: "Nunito";
+  src: url("/fonts/nunito-latin-400-normal.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
 }
 
-:root[data-applied-mode="system"],
-:root[data-applied-mode="default"],
-:root {
-  color-scheme: light dark;
-  --base-color: var(--ctp-latte-base);
-  --text-color: var(--ctp-latte-text);
-  --mantle-color: var(--ctp-latte-mantle);
-  --crust-color: var(--ctp-latte-crust);
+@font-face {
+  font-family: "Nunito";
+  src: url("/fonts/nunito-latin-600-normal.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
 }
 
-@media (prefers-color-scheme: dark) {
+@font-face {
+  font-family: "Nunito";
+  src: url("/fonts/nunito-latin-700-normal.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
 
-  :root[data-applied-mode="system"],
-  :root[data-applied-mode="default"],
-  :root {
-    --base-color: var(--ctp-mocha-base);
-    --text-color: var(--ctp-mocha-text);
-    --mantle-color: var(--ctp-mocha-mantle);
-    --crust-color: var(--ctp-mocha-crust);
+@font-face {
+  font-family: "Nunito";
+  src: url("/fonts/nunito-latin-800-normal.woff2") format("woff2");
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Maple Mono";
+  src: url("/fonts/maple-mono-latin-400-normal.woff2") format("woff2");
+  font-weight: 400;
+  font-style: mono;
+  font-display: swap;
+}
+
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+@import "@catppuccin/tailwindcss/mocha.css";
+
+@source "./src/**";
+
+@theme {
+  --font-sans: "Nunito", "sans-serif";
+  --font-mono: "Maple Mono", monospace;
+}
+
+@utility prose-catppuccin {
+  --tw-prose-body: var(--color-ctp-text);
+  --tw-prose-headings: var(--color-ctp-text);
+  --tw-prose-lead: var(--color-ctp-subtext1);
+  --tw-prose-links: var(--color-ctp-blue);
+  --tw-prose-bold: var(--color-ctp-text);
+  --tw-prose-counters: var(--color-ctp-subtext0);
+  --tw-prose-bullets: var(--color-ctp-overlay1);
+  --tw-prose-hr: var(--color-ctp-surface1);
+  --tw-prose-quotes: var(--color-ctp-text);
+  --tw-prose-quote-borders: var(--color-ctp-surface2);
+  --tw-prose-captions: var(--color-ctp-subtext1);
+  --tw-prose-code: var(--color-ctp-mauve);
+  --tw-prose-pre-code: var(--color-ctp-text);
+  --tw-prose-pre-bg: var(--color-ctp-mantle);
+  --tw-prose-th-borders: var(--color-ctp-surface2);
+  --tw-prose-td-borders: var(--color-ctp-surface1);
+
+  --tw-prose-invert-body: var(--color-ctp-text);
+  --tw-prose-invert-headings: var(--color-ctp-text);
+  --tw-prose-invert-lead: var(--color-ctp-subtext1);
+  --tw-prose-invert-links: var(--color-ctp-blue);
+  --tw-prose-invert-bold: var(--color-ctp-text);
+  --tw-prose-invert-counters: var(--color-ctp-subtext0);
+  --tw-prose-invert-bullets: var(--color-ctp-overlay1);
+  --tw-prose-invert-hr: var(--color-ctp-surface1);
+  --tw-prose-invert-quotes: var(--color-ctp-text);
+  --tw-prose-invert-quote-borders: var(--color-ctp-surface2);
+  --tw-prose-invert-captions: var(--color-ctp-subtext1);
+  --tw-prose-invert-code: var(--color-ctp-mauve);
+  --tw-prose-invert-pre-code: var(--color-ctp-text);
+  --tw-prose-invert-pre-bg: var(--color-ctp-crust);
+  --tw-prose-invert-th-borders: var(--color-ctp-surface2);
+  --tw-prose-invert-td-borders: var(--color-ctp-surface1);
+}
+
+
+@layer base {
+  body {
+    padding: 1rem;
   }
-}
 
-html,
-body {
-  font-family: monospace;
-  font-size: 14pt;
-  margin: auto;
-  overflow-x: clip;
-  background-color: var(--base-color);
-  color: var(--text-color);
-  min-height: 100dvh;
-  display: flex;
-  flex-direction: column;
-  width: min(var(--content-width), 100%);
-  box-sizing: border-box;
-  padding: 1rem;
-}
 
-nav {
-  display: flex;
-  direction: row;
-  gap: 2rem;
-  margin-bottom: 2rem;
-}
+  nav a:hover {
+    @apply underline;
+  }
 
-ul,
-ol,
-dl {
-  list-style-type: none;
-  padding-left: 0;
-}
+  .prose :not(pre)>code::before,
+  .prose :not(pre)>code::after {
+    content: "" !important;
+  }
 
-img {
-  display: block;
-  margin: 0 auto;
-}
-
-pre {
-  overflow-x: scroll;
-  color: var(--ctp-mocha-text);
-}
-
-.summary {
-  padding-left: 1rem;
-  font-size: 12pt;
-  font-weight: 300;
-}
-
-time {
-  font-size: 10pt;
+  figure {
+    @apply flex flex-col items-center
+  }
 }
