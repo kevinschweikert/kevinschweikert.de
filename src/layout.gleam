@@ -35,7 +35,7 @@ pub fn post_layout(post: post.Post) {
 }
 
 fn html(elements, additional_headers: option.Option(List(element.Element(Nil)))) {
-  html.html([], [
+  html.html([attribute.lang("en")], [
     // TODO: centralize title info
     head("Kevin Schweikert", option.None, additional_headers),
     html.body([], [
@@ -65,6 +65,10 @@ fn head(title: String, _description: option.Option(String), additional_headers) 
     [
       html.title([], title),
       html.meta([attribute.attribute("charset", "utf-8")]),
+      html.link([
+        attribute.rel("preconnect"),
+        attribute.href("https://plausible.kevinschweikert.de"),
+      ]),
       html.script(
         [
           attribute.attribute("async", "true"),
