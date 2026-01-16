@@ -53,7 +53,8 @@ img {
 }
 
 pre {
-  overflow-x: scroll
+  overflow-x: scroll;
+  color: var(--ctp-mocha-text);
 }
 
 .summary {
