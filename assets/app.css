@@ -1,7 +1,15 @@
-@import "https://cdn.jsdelivr.net/npm/@catppuccin/palette/css/catppuccin.css";
+/* @import "https://cdn.jsdelivr.net/npm/@catppuccin/palette/css/catppuccin.css"; */
 
 :root {
   --content-width: 960px;
+  --ctp-latte-text: #4c4f69;
+  --ctp-latte-base: #eff1f5;
+  --ctp-latte-crust: #dce0e8;
+  --ctp-frappe-mantle: #292c3c;
+  --ctp-mocha-text: #cdd6f4;
+  --ctp-mocha-base: #1e1e2e;
+  --ctp-mocha-mantle: #181825;
+  --ctp-mocha-crust: #11111b;
   font-size: 16px;
 }
 
