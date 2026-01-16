@@ -32,6 +32,18 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
       - name: setup rust cache
         uses: swatinem/rust-cache@v2.7.3
+        with:
+          workspaces: |
+            build/packages/glimra -> target
+      - name: Cache Gleam/Rebar3 artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            build
+            ~/.cache/rebar3
+          key: ${{ runner.os }}-gleam-${{ hashFiles('gleam.toml', 'manifest.toml', '**/rebar.config', '**/mix.exs') }}
+          restore-keys: |
+            ${{ runner.os }}-gleam-
       - name: Configure Git to use HTTPS
         run: git config --global url."https://github.com/".insteadOf "git@github.com:"
       - run: gleam deps download
