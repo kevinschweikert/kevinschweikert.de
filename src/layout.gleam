@@ -65,6 +65,12 @@ fn head(title: String, _description: option.Option(String), additional_headers) 
     [
       html.title([], title),
       html.meta([attribute.attribute("charset", "utf-8")]),
+      html.meta([
+        attribute.name("description"),
+        attribute.content(
+          "Hi! I'm Kevin Schweikert, a software engineer with a media technology background and a passion for neapolitan pizza 🍕",
+        ),
+      ]),
       html.link([
         attribute.rel("preconnect"),
         attribute.href("https://plausible.kevinschweikert.de"),
