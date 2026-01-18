@@ -477,7 +477,7 @@ I’d also love to integrate Homex into existing projects, for example:
 * [Soleil](https://hex.pm/packages/soleil)
 * [Govee lights](https://hex.pm/packages/govee_lights)
 
-> You event want to write your automations in Elixir? You're in luck - there's already an article on how to do exactly that [Writing Home Assistant automations using Genservers in Elixir](https://www.jonashietala.se/blog/2024/10/08/writing_home_assistant_automations_using_genservers_in_elixir) by Jonas Hietala.
+> You even want to write your automations in Elixir? You're in luck - there's already an article on how to do exactly that [Writing Home Assistant automations using Genservers in Elixir](https://www.jonashietala.se/blog/2024/10/08/writing_home_assistant_automations_using_genservers_in_elixir) by Jonas Hietala.
 
 For the long term, [Matter](https://csa-iot.org/all-solutions/matter/) could be an option to not just support the Home Assistant use-case but integrate in the home automation hub of your choice. 
 
