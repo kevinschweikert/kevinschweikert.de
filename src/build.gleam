@@ -62,7 +62,6 @@ pub fn main() {
     |> ssg.add_dynamic_route("/posts", route_info, layout.post_layout)
     |> ssg.add_static_dir("./assets")
     |> ssg.add_static_xml("/feed", feed)
-    |> glimra.add_static_stylesheet(syntax_highlighter: syntax_highlighter)
     |> ssg.build
 
   case build {

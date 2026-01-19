@@ -2,7 +2,6 @@ import config
 import gleam/list
 import gleam/option
 import gleam/uri
-import glimra
 import lustre/attribute
 import lustre/element
 import lustre/element/html
@@ -167,7 +166,6 @@ fn head(title: String, _description: option.Option(String), additional_headers) 
         attribute.rel("stylesheet"),
         attribute.href("/style.css"),
       ]),
-      glimra.link_static_stylesheet(),
     ]
       |> list.append(add_headers),
   )

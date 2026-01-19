@@ -84,9 +84,8 @@ Here, Home Assistant publishes commands to `state_topic`, and your app publishes
 
 There are only a few MQTT clients in Elixir and i've settled on [`emqtt`](https://hex.pm/packages/emqtt) which is an Erlang library made by the [EMQX](https://www.emqx.com) folks. EMQX is a MQTT broker and the client seems actively developed. It is also the only one which supports MQTT 5.0. The only current thing to look out for are some native/[NIF](https://www.erlang.org/doc/system/nif.html) dependencies for [QUIC](https://developer.mozilla.org/en-US/docs/Glossary/QUIC) support which are hard to build on Nerves. But we can override if we want to when using the `git` dependency:
 
+{data-file="mix.exs"}
 ```elixir
-# mix.exs
-
 def deps() do
   ...
   {:emqtt, github: "emqx/emqtt", system_env: [{"BUILD_WITHOUT_QUIC", "1"}]}
@@ -101,9 +100,8 @@ The following examples focus on functionality and ignore error handling in the m
 
 Let's create a [`GenServer`](https://hexdocs.pm/elixir/GenServer.html), creatively called `Homex.Manager` to handle the client life-cycle and discovery mechanism. Here we send an empty components payload on startup:
 
+{data-file="lib/manager.ex"}
 ```elixir
-# lib/manager.ex
-
 defmodule Homex.Manager do
   use GenServer
 
@@ -138,6 +136,7 @@ end
 
 Now we need to know when entities are added or when they are removed. They need to somehow register themselves and let the manager know about them. This sounds like a job for the Elixir [`Registry`](https://hexdocs.pm/elixir/Registry.html) module. We can start a new Registry in our application and set the Manager as a listener, so that we get notified when an Entity registers itself there:
 
+{data-file="application.ex"}
 ```elixir
 {Registry,
   name: Homex.SubscriptionRegistry,
@@ -148,9 +147,8 @@ Now we need to know when entities are added or when they are removed. They need 
 
 The keys will be the subscribe topics and we will receive the following events in `Homex.Manager`:
 
+{data-file="lib/manager.ex"}
 ```elixir
-# lib/manager.ex
-
 def handle_info({:register, _registry, topic, _pid, _value}, emqtt_pid) do
   :emqtt.subscribe(emqtt_pid, topic)
   {:noreply, emqtt_pid, {:continue, :discovery}}
@@ -164,6 +162,7 @@ end
 
 Perfect! Now we get notified when a new Entity registers itself and we subscribe to the requested topics. If a new message on the subscribed topics arrives, we have to delegate that message to the registered entities. We can make use of [`Registry.dispatch/4`](https://hexdocs.pm/elixir/Registry.html#dispatch/4) to implement our own PubSub mechanism:
 
+{data-file="lib/manager.ex"}
 ```elixir
 def handle_info({:publish, %{topic: topic, payload: payload}}, emqtt_pid) do
   Registry.dispatch(Homex.SubscriptionRegistry, topic, fn registered ->
@@ -178,9 +177,8 @@ end
 
 We just need to give the future entities a way to publish new messages in return:
 
+{data-file="lib/manager.ex"}
 ```elixir
-# lib/manager.ex
-
 def publish(topic, message) do
   GenServer.call(__MODULE__, {:publish, topic, message})
 end
@@ -196,9 +194,8 @@ end
 
 Almost done! Before we implement the real entities, we plan ahead and define a common interface for all future entity implementations:
 
+{data-file="lib/entity.ex"}
 ```elixir
-# lib/entity.ex
-
 defmodule Homex.Entity do
   @callback unique_id() :: String.t()
   @callback component() :: Map.t()
@@ -207,9 +204,8 @@ end
 
 Alright, final stretch! This is the base for our switch entity:
 
+{data-file="lib/entity.ex"}
 ```elixir
-# lib/entity/switch.ex
-
 defmodule Homex.Entity.Switch do
   use GenServer
 
@@ -241,9 +237,8 @@ end
 
 We defined a stable unique ID, registered our process in the registry and will handle a message on the state topic. We don't have to handle the command topic, because we will only write to it. Let's also implement the `Entity` behaviour, we defined earlier:
 
+{data-file="lib/entity/swtich.ex"}
 ```elixir
-# lib/entity/switch.ex
-
 @behaviour Homex.Entity
 
 def unique_id(), do: @unique_id
@@ -261,9 +256,8 @@ end
 
 This is enough to handle state updates from the Home Assistant side but we also want to manipulate the switch from our side. Let's define a public API and the necessary handlers:
 
+{data-file="lib/entity/swtich.ex"}
 ```elixir
-# lib/entity/switch.ex
-
 def toggle() do
   GenServer.cast(__MODULE__, :toggle)
 end
@@ -282,15 +276,15 @@ end
 
 We can start the `Homex.Manager` statically but the entities are more dynamic. So we will use a [`DynamicSupervisor`](https://hexdocs.pm/elixir/DynamicSupervisor.html). The supervisor can tell us which children are started. That's why we don't need a separate Registry to figure out which modules/components are started and should be included in the discovery message:
 
+{data-file="application.ex"}
 ```elixir
 {DynamicSupervisor, name: Homex.EntitySupervisor, strategy: :one_for_one}
 ```
 
 This starts a new DynamicSupervisor with the strategy `:one_for_one` which only restarts the crashed process and no other children:
 
+{data-file="lib/manager.ex"}
 ```elixir
-# lib/manager.ex
-
 def add_entity(module) do
   GenServer.call(__MODULE__, {:add_entity, module})  
 end
@@ -303,32 +297,33 @@ end
 
 And last but not least we can update our [`handle_continue/2`](https://hexdocs.pm/elixir/GenServer.html#c:handle_continue/2) function to send a full discovery message containing all supervised entities:
 
+{data-file="lib/manager.ex" data-lang="elixir"}
 ```elixir
-  def handle_continue(:discovery, emqtt_pid) do
-    entities =
-      DynamicSupervisor.which_children(Homex.EntitySupervisor)
-      |> Enum.map(fn {_id, _pid, _type, modules} -> modules end)
-      |> List.flatten()
+def handle_continue(:discovery, emqtt_pid) do
+  entities =
+    DynamicSupervisor.which_children(Homex.EntitySupervisor)
+    |> Enum.map(fn {_id, _pid, _type, modules} -> modules end)
+    |> List.flatten()
 
-    components =
-      for module <- entities, into: %{} do
-        {module.unique_id(), module.component()}
-      end
-  
-    discovery_config = %{
-      device: %{name: "Homex", identifiers: ["Homex"]},
-      origin: %{name: "homex"},
-      components: components
-    }
+  components =
+    for module <- entities, into: %{} do
+      {module.unique_id(), module.component()}
+    end
 
-    payload = Jason.encode!(discovery_config)
-    :emqtt.publish(emqtt_pid, "/homeassistant/device/homex/config", payload)
-  end
+  discovery_config = %{
+    device: %{name: "Homex", identifiers: ["Homex"]},
+    origin: %{name: "homex"},
+    components: components
+  }
+
+  payload = Jason.encode!(discovery_config)
+  :emqtt.publish(emqtt_pid, "/homeassistant/device/homex/config", payload)
+end
 ```
 
 Let's try it out!
 
-```elixir
+```iex
 1> Homex.Manager.start_link([])
 {:ok, _pid}
 2> Homex.Manager.add_entity(Homex.Entity.Switch)
@@ -414,14 +409,14 @@ Homex.add_entity(MySwitch)
 ```
 
 ::: info
-Typically you would start Homex in you supervision tree.
+Typically you would start Homex in your supervision tree.
 :::
 
 After that we can see the new entity in Home Assistant and some logs in our application when we toggle the switch on and off.
 
 ![`MySwitch` in Home Assistant](/images/ha_my_switch.png)
 
-```text
+```
 13:27:17.973 [info] added entity my-switch
 Switch turned on
 Switch turned off

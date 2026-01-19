@@ -107,17 +107,17 @@
 
   .tip::before {
     content: "Tip";
-    @apply text-ctp-sapphire
+    color: var(--color-ctp-sapphire);
   }
 
   .info::before {
     content: "Info";
-    @apply text-ctp-blue
+    color: var(--color-ctp-blue);
   }
 
   .warning::before {
     content: "Warning";
-    @apply text-ctp-peach
+    color: var(--color-ctp-peach);
   }
 
   :is(.info, .tip, .warning) {
@@ -130,5 +130,304 @@
 
   :is(.info, .tip, .warning)::before {
     @apply block font-semibold mb-1;
+  }
+
+}
+
+
+@layer highlight {
+  pre {
+    background-color: var(--color-ctp-mantle);
+    position: relative;
+    @apply p-4 rounded-xl
+  }
+
+  pre[data-file]::before {
+    content: attr(data-file);
+    display: block;
+    color: var(--color-ctp-subtext0);
+    @apply text-sm rounded mb-4
+  }
+
+
+  pre>code[data-lang]::after {
+    content: attr(data-lang);
+    position: absolute;
+    z-index: 1;
+    display: inline-block;
+    color: var(--color-ctp-overlay0);
+    pointer-events: none;
+    @apply top-1 right-1 p-1 text-sm rounded
+  }
+
+  pre>code[data-lang="text"]::after {
+    content: none
+  }
+
+  pre>code {
+    color: var(--color-ctp-text)
+  }
+
+  code {
+    counter-reset: step;
+    counter-increment: step 0;
+  }
+
+  .line {
+    display: block;
+  }
+
+  .line::after {
+    content: "\A";
+    white-space: pre;
+  }
+
+  .line:last-child::after {
+    content: none;
+  }
+
+  /* uncomment for line numbers */
+  /* .line::before { */
+  /* content: counter(step); */
+  /* counter-increment: step; */
+  /* width: 1rem; */
+  /* margin-right: 1.5rem; */
+  /* display: inline-block; */
+  /* text-align: right; */
+  /* color: var(--color-ctp-overlay1); */
+  /* opacity: 0.4; */
+  /* } */
+
+  /* .line:empty::before { */
+  /* content: counter(step) "\200b" */
+  /* } */
+
+  .variable {
+    color: var(--color-ctp-text);
+  }
+
+  .variable\.builtin {
+    color: var(--color-ctp-red);
+  }
+
+  .variable\.member {
+    color: var(--color-ctp-text);
+  }
+
+  .variable\.parameter\.builtin {
+    color: var(--color-ctp-maroon);
+  }
+
+  .variable\.parameter {
+    color: var(--color-ctp-maroon);
+  }
+
+  .constant {
+    color: var(--color-ctp-peach);
+  }
+
+  .constant\.builtin {
+    color: var(--color-ctp-peach);
+  }
+
+  .constant\.macro {
+    color: var(--color-ctp-mauve);
+  }
+
+  .module {
+    color: var(--color-ctp-yellow);
+  }
+
+  .label {
+    color: var(--color-ctp-sapphire);
+  }
+
+  /* literals */
+  .string {
+    color: var(--color-ctp-green);
+  }
+
+  .string\.documentation {
+    color: var(--color-ctp-overlay0);
+  }
+
+  .string\.escape {
+    color: var(--color-ctp-pink);
+  }
+
+  .string\.regexp {
+    color: var(--color-ctp-peach);
+  }
+
+  .string\.special {
+    color: var(--color-ctp-red);
+  }
+
+  .character {
+    color: var(--color-ctp-teal);
+  }
+
+  .character\.special {
+    color: var(--color-ctp-pink);
+  }
+
+  .boolean {
+    color: var(--color-ctp-peach);
+  }
+
+  .number {
+    color: var(--color-ctp-peach);
+  }
+
+  /* types */
+  .type {
+    color: var(--color-ctp-yellow);
+  }
+
+  .type\.builtin {
+    color: var(--color-ctp-yellow);
+  }
+
+  .type\.definition {
+    color: var(--color-ctp-yellow);
+  }
+
+  .attribute {
+    color: var(--color-ctp-blue);
+  }
+
+  .attribute\.builtin {
+    color: var(--color-ctp-peach);
+  }
+
+  .property {
+    color: var(--color-ctp-lavender);
+  }
+
+  /* functions */
+  .function {
+    color: var(--color-ctp-blue);
+  }
+
+  .function\.builtin {
+    color: var(--color-ctp-peach);
+  }
+
+  .function\.call {
+    color: var(--color-ctp-blue);
+  }
+
+  .function\.macro {
+    color: var(--color-ctp-teal);
+  }
+
+  .function\.method {
+    color: var(--color-ctp-blue);
+  }
+
+  .function\.method.call {
+    color: var(--color-ctp-blue);
+  }
+
+  .constructor {
+    color: var(--color-ctp-sapphire);
+  }
+
+  .operator {
+    color: var(--color-ctp-sky);
+  }
+
+  /* keywords */
+  .keyword {
+    color: var(--color-ctp-mauve);
+  }
+
+  .keyword\.coroutine {
+    color: var(--color-ctp-mauve);
+  }
+
+  .keyword\.function {
+    color: var(--color-ctp-mauve);
+  }
+
+  .keyword\.operator {
+    color: var(--color-ctp-mauve);
+  }
+
+  .keyword\.import {
+    color: var(--color-ctp-mauve);
+  }
+
+  .keyword\.type {
+    color: var(--color-ctp-mauve);
+  }
+
+  .keyword\.modifier {
+    color: var(--color-ctp-mauve);
+  }
+
+  .keyword\.repeat {
+    color: var(--color-ctp-mauve);
+  }
+
+  .keyword\.return {
+    color: var(--color-ctp-mauve);
+  }
+
+  .keyword\.debug {
+    color: var(--color-ctp-pink);
+  }
+
+  .keyword\.exception {
+    color: var(--color-ctp-mauve);
+  }
+
+  .keyword\.conditional {
+    color: var(--color-ctp-mauve);
+  }
+
+  .keyword\.conditional\.ternary {
+    color: var(--color-ctp-mauve);
+  }
+
+  .punctuation {
+    color: var(--color-ctp-overlay2);
+  }
+
+  .punctuation\.bracket {
+    color: var(--color-ctp-overlay2);
+  }
+
+  .punctuation\.delimiter {
+    color: var(--color-ctp-overlay2);
+  }
+
+  .punctuation\.special {
+    color: var(--color-ctp-pink);
+  }
+
+  /* comments */
+  .comment {
+    color: var(--color-ctp-overlay0);
+  }
+
+  .comment\.documentation {
+    color: var(--color-ctp-overlay0);
+  }
+
+  .tag {
+    color: var(--color-ctp-mauve);
+  }
+
+  .tag\.builtin {
+    color: var(--color-ctp-mauve);
+  }
+
+  .tag\.attribute {
+    color: var(--color-ctp-teal);
+  }
+
+  .tag\.delimiter {
+    color: var(--color-ctp-sky);
   }
 }
