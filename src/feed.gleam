@@ -1,3 +1,4 @@
+import config
 import gleam/list
 import gleam/time/calendar
 import gleam/time/timestamp
@@ -7,29 +8,24 @@ import lustre/element/html
 import lustre/ssg/atom
 import post
 
-import index
-
-// [TODO]: put in gleam.toml
-const domain = "kevinschweikert.de"
-
 pub fn build(title: String, posts: List(post.Post)) {
   atom.feed([], [
     atom.title([], title),
-    atom.id([], domain),
+    atom.id([], config.domain()),
     // [TODO]: don't update on each build
     atom.updated([], now()),
     atom.link([
       attribute.rel("self"),
-      attribute.href("https://" <> domain <> "/feed.xml"),
+      attribute.href(config.root_url() <> "/feed.xml"),
     ]),
-    atom.author([], [atom.name([], "Kevin Schweikert")]),
+    atom.author([], [atom.name([], config.author())]),
     ..{
       use post <- list.map(posts)
       atom.entry([], [
         atom.title([], post.title),
         atom.link([
           attribute.rel("alternate"),
-          attribute.href("https://" <> domain <> "/posts/" <> post.slug),
+          attribute.href(config.root_url() <> "/posts/" <> post.slug),
         ]),
         atom.id([], post.slug),
         atom.published([], post.date |> date_to_datetime()),

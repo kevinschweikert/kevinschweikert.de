@@ -1,3 +1,4 @@
+import config
 import gleam/list
 import gleam/option
 import gleam/uri
@@ -11,12 +12,8 @@ import post
 pub fn layout(elements) {
   let assert Ok(uri) = uri.parse("https://kevinschweikert.de")
   let og = [
-    // TODO: centralize description info
-    opengraph.description(
-      "Hi! I'm Kevin Schweikert, a software engineer with a media technology background and a passion for neapolitan pizza 🍕",
-    ),
-    // TODO: centralize title info
-    opengraph.title("Kevin Schweikert"),
+    opengraph.description(config.description()),
+    opengraph.title(config.title()),
     opengraph.url(uri),
     opengraph.website(),
   ]
@@ -36,8 +33,7 @@ pub fn post_layout(post: post.Post) {
 
 fn html(elements, additional_headers: option.Option(List(element.Element(Nil)))) {
   html.html([attribute.lang("en")], [
-    // TODO: centralize title info
-    head("Kevin Schweikert", option.None, additional_headers),
+    head(config.title(), option.None, additional_headers),
     html.body(
       [
         attribute.class(
@@ -134,9 +130,7 @@ fn head(title: String, _description: option.Option(String), additional_headers) 
       html.meta([attribute.attribute("charset", "utf-8")]),
       html.meta([
         attribute.name("description"),
-        attribute.content(
-          "Hi! I'm Kevin Schweikert, a software engineer with a media technology background and a passion for neapolitan pizza 🍕",
-        ),
+        attribute.content(config.description()),
       ]),
       html.link([
         attribute.rel("preconnect"),
@@ -156,10 +150,9 @@ fn head(title: String, _description: option.Option(String), additional_headers) 
         "window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
   plausible.init()",
       ),
-      // TODO: centralize author info
       html.meta([
         attribute.attribute("name", "author"),
-        attribute.attribute("content", "Kevin Schweikert"),
+        attribute.attribute("content", config.author()),
       ]),
       html.meta([
         attribute.attribute("name", "viewport"),
