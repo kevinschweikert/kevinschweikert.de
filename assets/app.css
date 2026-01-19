@@ -104,4 +104,31 @@
   figure {
     @apply flex flex-col items-center
   }
+
+  .tip::before {
+    content: "Tip";
+    @apply text-ctp-sapphire
+  }
+
+  .info::before {
+    content: "Info";
+    @apply text-ctp-blue
+  }
+
+  .warning::before {
+    content: "Warning";
+    @apply text-ctp-peach
+  }
+
+  :is(.info, .tip, .warning) {
+    @apply bg-ctp-crust p-4 rounded-xl my-2;
+  }
+
+  .prose :where(:is(.info, .tip, .warning) p) {
+    margin-block: 0 !important;
+  }
+
+  :is(.info, .tip, .warning)::before {
+    @apply block font-semibold mb-1;
+  }
 }
