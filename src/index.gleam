@@ -71,7 +71,7 @@ fn post_item(post: post.Post) -> element.Element(a) {
     html.p([attribute.class("text-sm mt-0")], [
       html.time(
         [
-          attribute.attribute("datetime", date_to_string(post.date)),
+          attribute.attribute("datetime", date_to_iso8601(post.date)),
         ],
         [
           html.text(abbr_post_date(post)),
@@ -83,10 +83,13 @@ fn post_item(post: post.Post) -> element.Element(a) {
   ])
 }
 
-fn date_to_string(date: calendar.Date) -> String {
+fn date_to_iso8601(date: calendar.Date) -> String {
   [
-    date.day |> int.to_string(),
-    date.month |> calendar.month_to_int() |> int.to_string(),
+    date.day |> int.to_string() |> string.pad_start(2, "0"),
+    date.month
+      |> calendar.month_to_int()
+      |> int.to_string()
+      |> string.pad_start(2, "0"),
     date.year |> int.to_string(),
   ]
   |> string.join("-")

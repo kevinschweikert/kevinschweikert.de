@@ -1,34 +1,59 @@
 import gleam/list
-import layout
+import gleam/time/calendar
+import gleam/time/timestamp
 import lustre/attribute
 import lustre/element
+import lustre/element/html
 import lustre/ssg/atom
 import post
 
+import index
+
+// [TODO]: put in gleam.toml
+const domain = "kevinschweikert.de"
+
 pub fn build(title: String, posts: List(post.Post)) {
-  let root = [
+  atom.feed([], [
     atom.title([], title),
-    atom.id([], "kevinschweikert.de"),
-    atom.updated([], "2023-11-23T18:00:00Z"),
-    atom.link([attribute.rel("self"), attribute.href("/feed")]),
+    atom.id([], domain),
+    // [TODO]: don't update on each build
+    atom.updated([], now()),
+    atom.link([
+      attribute.rel("self"),
+      attribute.href("https://" <> domain <> "/feed.xml"),
+    ]),
     atom.author([], [atom.name([], "Kevin Schweikert")]),
-  ]
-  let entries =
-    list.map(posts, fn(post: post.Post) {
+    ..{
+      use post <- list.map(posts)
       atom.entry([], [
         atom.title([], post.title),
         atom.link([
           attribute.rel("alternate"),
-          attribute.href("/posts/" <> post.slug),
+          attribute.href("https://" <> domain <> "/posts/" <> post.slug),
         ]),
-        atom.id([], "some id"),
-        atom.updated([], post.date |> post.date_to_string),
+        atom.id([], post.slug),
+        atom.published([], post.date |> date_to_datetime()),
+        atom.updated([], post.date |> date_to_datetime()),
         atom.summary([], post.summary),
         atom.content(
           [],
-          post.elements |> layout.layout() |> element.to_string(),
+          // [TODO]: don't add server rendered highlighting
+          post.elements |> html.article([], _) |> element.to_string(),
         ),
       ])
-    })
-  atom.feed([], root |> list.append(entries))
+    }
+  ])
+}
+
+fn now() {
+  timestamp.system_time() |> timestamp.to_rfc3339(calendar.utc_offset)
+}
+
+fn date_to_datetime(date: calendar.Date) -> String {
+  timestamp.from_calendar(
+    date,
+    calendar.TimeOfDay(0, 0, 0, 0),
+    calendar.utc_offset,
+  )
+  |> timestamp.to_rfc3339(calendar.utc_offset)
 }
