@@ -45,6 +45,7 @@ pub fn main() {
   let contact = pages.from_file("contact.dj") |> layout.layout()
   let uses = pages.from_file("uses.dj") |> layout.layout()
   let now = pages.from_file("now.dj") |> layout.layout()
+  let impress = pages.from_file("impress.dj") |> layout.layout()
   let feed = feed.build(index.title(), posts)
 
   let assert Ok(Nil) =
@@ -57,6 +58,7 @@ pub fn main() {
     |> ssg.add_static_route("/contact", contact)
     |> ssg.add_static_route("/uses", uses)
     |> ssg.add_static_route("/now", now)
+    |> ssg.add_static_route("/impress", impress)
     |> ssg.add_dynamic_route("/posts", route_info, layout.post_layout)
     |> ssg.add_static_dir("./assets")
     |> ssg.add_static_xml("/feed", feed)

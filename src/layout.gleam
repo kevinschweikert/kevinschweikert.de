@@ -109,6 +109,11 @@ fn html(elements, additional_headers: option.Option(List(element.Element(Nil))))
                 [html.text("Open an issue")],
               ),
             ]),
+            html.p([], [
+              html.a([attribute.href("/impress.html")], [
+                html.text("Impress / Impressum"),
+              ]),
+            ]),
           ],
         ),
       ],
