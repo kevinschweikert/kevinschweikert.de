@@ -1,6 +1,7 @@
 import gleam/list
 import gleam/option
 import gleam/result
+import gleam/string
 import gleam/time/calendar
 import helper
 import lustre/attribute
@@ -53,9 +54,11 @@ pub fn get_posts(highlighter) {
     |> result.map_error(ParseError),
   )
 
+  // filename.dj -> filename
+  let slug = string.drop_end(filename, 3)
+
   let assert Ok(draft) = tom.get_bool(metadata, ["draft"])
   let assert Ok(title) = tom.get_string(metadata, ["title"])
-  let assert Ok(slug) = tom.get_string(metadata, ["slug"])
   let assert Ok(summary) = tom.get_string(metadata, ["summary"])
   let assert Ok(published) = tom.get_date(metadata, ["published"])
   let updated = tom.get_date(metadata, ["updated"]) |> option.from_result()
