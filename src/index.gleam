@@ -5,6 +5,7 @@ import gleam/list
 import gleam/order
 import gleam/string
 import gleam/time/calendar
+import helper
 import lustre/attribute
 import lustre/element
 import lustre/element/html
@@ -17,7 +18,7 @@ pub fn title() {
 pub fn render(posts: List(post.Post)) -> List(element.Element(a)) {
   let posts_by_year =
     posts
-    |> list.group(fn(post) { post.date.year })
+    |> list.group(fn(post) { post.published.year })
     |> dict.to_list()
     |> list.sort(fn(a, b) { int.compare(b.0, a.0) })
   [
@@ -54,7 +55,7 @@ fn post_list(posts: List(post.Post)) -> element.Element(a) {
 }
 
 fn posts_by_date(post_a: post.Post, post_b: post.Post) -> order.Order {
-  calendar.naive_date_compare(post_b.date, post_a.date)
+  calendar.naive_date_compare(post_b.published, post_a.published)
 }
 
 fn post_item(post: post.Post) -> element.Element(a) {
@@ -71,7 +72,7 @@ fn post_item(post: post.Post) -> element.Element(a) {
     html.p([attribute.class("text-sm mt-0")], [
       html.time(
         [
-          attribute.attribute("datetime", date_to_iso8601(post.date)),
+          attribute.attribute("datetime", helper.date_to_string(post.published)),
         ],
         [
           html.text(abbr_post_date(post)),
@@ -83,20 +84,9 @@ fn post_item(post: post.Post) -> element.Element(a) {
   ])
 }
 
-fn date_to_iso8601(date: calendar.Date) -> String {
-  [
-    date.day |> int.to_string() |> string.pad_start(2, "0"),
-    date.month
-      |> calendar.month_to_int()
-      |> int.to_string()
-      |> string.pad_start(2, "0"),
-    date.year |> int.to_string(),
-  ]
-  |> string.join("-")
-}
-
 fn abbr_post_date(post: post.Post) -> String {
-  let month_abbr = case post.date.month {
+  let calendar.Date(year: _, month:, day:) = post.published
+  let month_abbr = case month {
     calendar.January -> "JAN"
     calendar.February -> "FEB"
     calendar.March -> "MAR"
@@ -111,5 +101,5 @@ fn abbr_post_date(post: post.Post) -> String {
     calendar.December -> "DEC"
   }
 
-  month_abbr <> " " <> int.to_string(post.date.day)
+  month_abbr <> " " <> int.to_string(day) |> string.pad_start(2, "0")
 }

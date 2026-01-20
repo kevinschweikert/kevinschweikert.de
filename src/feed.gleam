@@ -1,7 +1,9 @@
 import config
 import gleam/list
+import gleam/option
 import gleam/time/calendar
 import gleam/time/timestamp
+import helper
 import lustre/attribute
 import lustre/element
 import lustre/element/html
@@ -28,8 +30,13 @@ pub fn build(title: String, posts: List(post.Post)) {
           attribute.href(config.root_url() <> "/posts/" <> post.slug),
         ]),
         atom.id([], post.slug),
-        atom.published([], post.date |> date_to_datetime()),
-        atom.updated([], post.date |> date_to_datetime()),
+        atom.published([], post.published |> helper.date_to_datetime()),
+        atom.updated(
+          [],
+          post.updated
+            |> option.unwrap(post.published)
+            |> helper.date_to_datetime(),
+        ),
         atom.summary([], post.summary),
         atom.content(
           [],
@@ -43,13 +50,4 @@ pub fn build(title: String, posts: List(post.Post)) {
 
 fn now() {
   timestamp.system_time() |> timestamp.to_rfc3339(calendar.utc_offset)
-}
-
-fn date_to_datetime(date: calendar.Date) -> String {
-  timestamp.from_calendar(
-    date,
-    calendar.TimeOfDay(0, 0, 0, 0),
-    calendar.utc_offset,
-  )
-  |> timestamp.to_rfc3339(calendar.utc_offset)
 }

@@ -1,8 +1,8 @@
-import gleam/int
 import gleam/list
+import gleam/option
 import gleam/result
-import gleam/string
 import gleam/time/calendar
+import helper
 import lustre/attribute
 import lustre/element/html
 import render
@@ -18,7 +18,8 @@ pub type Post {
     draft: Bool,
     slug: String,
     title: String,
-    date: calendar.Date,
+    published: calendar.Date,
+    updated: option.Option(calendar.Date),
     summary: String,
     elements: List(element.Element(Nil)),
   )
@@ -56,36 +57,41 @@ pub fn get_posts(highlighter) {
   let assert Ok(title) = tom.get_string(metadata, ["title"])
   let assert Ok(slug) = tom.get_string(metadata, ["slug"])
   let assert Ok(summary) = tom.get_string(metadata, ["summary"])
-  let assert Ok(date) = tom.get_date(metadata, ["date"])
+  let assert Ok(published) = tom.get_date(metadata, ["published"])
+  let updated = tom.get_date(metadata, ["updated"]) |> option.from_result()
 
-  let post = Post(draft:, slug:, title:, summary:, date:, elements:) |> layout()
+  let post =
+    Post(draft:, slug:, title:, summary:, published:, updated:, elements:)
+    |> layout()
   Ok(post)
 }
 
 fn layout(post: Post) -> Post {
   let title = html.h1([], [html.text(post.title)])
-  let datetime =
-    attribute.attribute(
-      "datetime",
-      post.date
-        |> date_to_string,
-    )
-  let date =
-    html.time([attribute.class("text-sm"), datetime], [
+  let datetime = fn(date) {
+    attribute.attribute("datetime", helper.date_to_string(date))
+  }
+
+  let updated = case post.updated {
+    option.Some(updated) -> [
+      html.text(" - "),
+      html.time([attribute.class("text-sm"), datetime(updated)], [
+        html.text("updated on "),
+        html.text(updated |> helper.date_to_humanized_string),
+      ]),
+    ]
+    option.None -> []
+  }
+
+  let published =
+    html.time([attribute.class("text-sm"), datetime(post.published)], [
       html.text("Published on "),
       html.text(
-        post.date
-        |> date_to_string,
+        post.published
+        |> helper.date_to_humanized_string,
       ),
+      ..updated
     ])
 
-  Post(..post, elements: [html.article([], [title, date, ..post.elements])])
-}
-
-pub fn date_to_string(date: calendar.Date) -> String {
-  let day = date.day |> int.to_string() |> string.pad_start(2, "0")
-  let month = date.month |> calendar.month_to_string()
-  let year = date.year |> int.to_string()
-
-  month <> " " <> day <> ", " <> year
+  Post(..post, elements: [html.article([], [title, published, ..post.elements])])
 }
