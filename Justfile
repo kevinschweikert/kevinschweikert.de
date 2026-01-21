@@ -1,4 +1,7 @@
-build:
+tailwind:
+    npm run build:prod
+    
+build: tailwind
     gleam run -m build
 
 dev:

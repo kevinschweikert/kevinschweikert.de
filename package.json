@@ -25,6 +25,7 @@
     "copy-maple-mono": "npm run fonts:maple-mono:400",
     "copy-fonts": "npm run fonts:dir && npm run copy-nunito && npm run copy-maple-mono",
 
-    "build": "tailwindcss -i assets/app.css -o assets/style.css"
+    "build": "tailwindcss -i assets/app.css -o assets/style.css",
+    "build:prod": "tailwindcss -i assets/app.css -o assets/style.css --minify"
   }  
 }
