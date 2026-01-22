@@ -15,7 +15,7 @@ pub fn title() {
   "kevinschweikert.de"
 }
 
-pub fn render(posts: List(post.Post)) -> List(element.Element(a)) {
+pub fn elements(posts: List(post.Post)) -> List(element.Element(a)) {
   let posts_by_year =
     posts
     |> list.group(fn(post) { post.published.year })
