@@ -13,7 +13,6 @@ version = "1.0.0"
 # https://gleam.run/writing-gleam/gleam-toml/.
 
 [dependencies]
-gleam_stdlib = ">= 0.44.0 and < 2.0.0"
 gleeunit = ">= 1.0.0 and < 2.0.0"
 lustre_ssg = {git = "git@github.com:kevinschweikert/ssg.git", ref = "ks/update-tom"}
 lustre = ">= 5.4.0 and < 6.0.0"
@@ -23,3 +22,5 @@ tom = ">= 2.0.0 and < 3.0.0"
 gleam_time = ">= 1.6.0 and < 2.0.0"
 envoy = ">= 1.1.0 and < 2.0.0"
 webls = ">= 1.6.0 and < 2.0.0"
+typst = ">= 0.2.2 and < 1.0.0"
+gleam_erlang = ">= 1.3.0 and < 2.0.0"

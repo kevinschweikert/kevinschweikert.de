@@ -1,9 +1,16 @@
+import gleam/uri
+
 pub fn domain() {
   "kevinschweikert.de"
 }
 
 pub fn root_url() {
   "https://" <> domain()
+}
+
+pub fn url(segment: String) -> uri.Uri {
+  let assert Ok(uri) = uri.parse(root_url() <> segment)
+  uri
 }
 
 pub fn author() {

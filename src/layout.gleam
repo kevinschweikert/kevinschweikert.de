@@ -1,38 +1,74 @@
 import config
-import gleam/list
 import gleam/option
-import gleam/uri
 import lustre/attribute
 import lustre/element
 import lustre/element/html
 import lustre/ssg/opengraph
-import post
+import page
 
-pub fn layout(elements) {
-  let assert Ok(uri) = uri.parse("https://kevinschweikert.de")
-  let og = [
-    opengraph.description(config.description()),
-    opengraph.title(config.title()),
-    opengraph.url(uri),
-    opengraph.website(),
-  ]
-  html(elements, option.Some(og))
-}
+const plausible_source = "https://plausible.kevinschweikert.de/js/pa-Xjy2lqLyTD7zfUCRDjM3k.js"
 
-pub fn post_layout(post: post.Post) {
-  let assert Ok(uri) = uri.parse("/posts/" <> post.slug)
-  let og = [
-    opengraph.description(post.summary),
-    opengraph.title(post.title),
-    opengraph.url(uri),
-    opengraph.website(),
-  ]
-  html(post.elements, option.Some(og))
-}
+const plausible_script = "window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+  plausible.init()"
 
-fn html(elements, additional_headers: option.Option(List(element.Element(Nil)))) {
+pub fn layout(page: page.Page(a)) {
   html.html([attribute.lang("en")], [
-    head(config.title(), option.None, additional_headers),
+    html.head([], [
+      html.title([], page.title),
+      html.meta([attribute.attribute("charset", "utf-8")]),
+      html.meta([
+        attribute.name("description"),
+        attribute.content(page.description),
+      ]),
+      html.link([
+        attribute.rel("preconnect"),
+        attribute.href("https://plausible.kevinschweikert.de"),
+      ]),
+      html.script(
+        [
+          attribute.attribute("async", "true"),
+          attribute.src(plausible_source),
+        ],
+        "",
+      ),
+      html.script([], plausible_script),
+      html.meta([
+        attribute.attribute("name", "author"),
+        attribute.attribute("content", config.author()),
+      ]),
+      html.meta([
+        attribute.attribute("name", "viewport"),
+        attribute.attribute("content", "width=device-width, initial-scale=1"),
+      ]),
+      html.link([
+        attribute.rel("icon"),
+        attribute.attribute("type", "image/svg+xml"),
+        attribute.href("/favicon.svg"),
+      ]),
+      html.link([
+        attribute.rel("stylesheet"),
+        attribute.href("/style.css"),
+      ]),
+      opengraph.description(page.description),
+      opengraph.title(page.title),
+      opengraph.url(page.url),
+      {
+        case page.page_type {
+          page.Website -> opengraph.website()
+          page.Article ->
+            html.meta([
+              attribute.attribute("property", "og:type"),
+              attribute.content("article"),
+            ])
+        }
+      },
+      {
+        case page.image {
+          option.Some(image) -> opengraph.image(image)
+          option.None -> element.fragment([])
+        }
+      },
+    ]),
     html.body(
       [
         attribute.class(
@@ -62,7 +98,7 @@ fn html(elements, additional_headers: option.Option(List(element.Element(Nil))))
               "flex-1 min-w-0 w-full max-w-prose mx-auto prose dark:prose-invert prose-catppuccin prose-img:rounded-lg  prose-a:no-underline prose-a:hover:underline prose-pre:text-ctp-base dark:prose-pre:text-ctp-text",
             ),
           ],
-          elements,
+          page.elements,
         ),
         html.footer(
           [
@@ -114,59 +150,4 @@ fn html(elements, additional_headers: option.Option(List(element.Element(Nil))))
       ],
     ),
   ])
-}
-
-fn head(title: String, _description: option.Option(String), additional_headers) {
-  let add_headers = case additional_headers {
-    option.Some(headers) -> headers
-    _ -> []
-  }
-
-  html.head(
-    [],
-    [
-      html.title([], title),
-      html.meta([attribute.attribute("charset", "utf-8")]),
-      html.meta([
-        attribute.name("description"),
-        attribute.content(config.description()),
-      ]),
-      html.link([
-        attribute.rel("preconnect"),
-        attribute.href("https://plausible.kevinschweikert.de"),
-      ]),
-      html.script(
-        [
-          attribute.attribute("async", "true"),
-          attribute.src(
-            "https://plausible.kevinschweikert.de/js/pa-Xjy2lqLyTD7zfUCRDjM3k.js",
-          ),
-        ],
-        "",
-      ),
-      html.script(
-        [],
-        "window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
-  plausible.init()",
-      ),
-      html.meta([
-        attribute.attribute("name", "author"),
-        attribute.attribute("content", config.author()),
-      ]),
-      html.meta([
-        attribute.attribute("name", "viewport"),
-        attribute.attribute("content", "width=device-width, initial-scale=1"),
-      ]),
-      html.link([
-        attribute.rel("icon"),
-        attribute.attribute("type", "image/svg+xml"),
-        attribute.href("/favicon.svg"),
-      ]),
-      html.link([
-        attribute.rel("stylesheet"),
-        attribute.href("/style.css"),
-      ]),
-    ]
-      |> list.append(add_headers),
-  )
 }
