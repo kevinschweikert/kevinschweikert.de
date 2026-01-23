@@ -105,6 +105,11 @@
     @apply flex flex-col items-center
   }
 
+  .note::before {
+    content: "Note";
+    color: var(--color-ctp-mauve);
+  }
+
   .tip::before {
     content: "Tip";
     color: var(--color-ctp-sapphire);
@@ -120,15 +125,15 @@
     color: var(--color-ctp-peach);
   }
 
-  :is(.info, .tip, .warning) {
+  :is(.note, .info, .tip, .warning) {
     @apply bg-ctp-crust p-4 rounded-xl my-2;
   }
 
-  .prose :where(:is(.info, .tip, .warning) p) {
+  .prose :where(:is(.note, .info, .tip, .warning) p) {
     margin-block: 0 !important;
   }
 
-  :is(.info, .tip, .warning)::before {
+  :is(.note, .info, .tip, .warning)::before {
     @apply block font-semibold mb-1;
   }
 
@@ -139,7 +144,7 @@
   pre {
     background-color: var(--color-ctp-mantle);
     position: relative;
-    @apply p-4 rounded-xl
+    @apply p-3 sm:p-4 rounded-xl
   }
 
   pre[data-file]::before {

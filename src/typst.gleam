@@ -53,9 +53,8 @@ pub fn render(config: TypstConfig) -> Result(BitArray, TypstError) {
   let bindings = to_keyword_list(config.bindings)
   case render_to_png(config.markup, bindings, config.options) {
     Ok([]) -> Error(Empty)
-    Ok([png]) -> Ok(png)
+    Ok([png, ..]) -> Ok(png)
     Error(message) -> Error(Message(message))
-    _ -> Error(Unknown)
   }
 }
 
