@@ -104,7 +104,7 @@ pub fn root(page: page.Page) {
         html.main(
           [
             attribute.class(
-              "flex-1 min-w-0 w-full max-w-prose mx-auto prose dark:prose-invert prose-catppuccin prose-img:rounded-lg  prose-a:no-underline prose-a:hover:underline prose-pre:text-ctp-base dark:prose-pre:text-ctp-text",
+              "flex-1 min-w-0 w-full max-w-3xl mx-auto prose dark:prose-invert prose-catppuccin prose-img:rounded-lg  prose-a:no-underline prose-a:hover:underline prose-pre:text-ctp-base dark:prose-pre:text-ctp-text",
             ),
           ],
           page.to_elements(page),
