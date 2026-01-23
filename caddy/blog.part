@@ -1,0 +1,30 @@
+encode zstd gzip
+
+@static path *.ico *.js *.gif *.webp *.avif *.jpg *.jpeg *.png *.svg *.woff *.woff2
+header @static Cache-Control "public, max-age=600"
+
+@livemd path *.livemd
+header @livemd {
+	Content-Type "text/markdown; charset=utf-8"
+	Access-Control-Allow-Origin "*"
+}
+
+# /index.html -> /
+@rootIndex path /index.html
+redir @rootIndex / 308
+
+# /any/path/index.html -> /any/path/
+@anyIndex path_regexp anyIndex ^(.*/)?index\.html$
+redir @anyIndex {re.anyIndex.1} 308
+
+# /:slug.html -> /:slug/
+# (top-level only; does NOT match /posts/foo.html)
+@topHtml path_regexp topHtml ^/([^/]+)\.html$
+redir @topHtml /{re.topHtml.1}/ 308
+
+# /posts/:slug.html -> /posts/:slug/
+@postHtml path_regexp postHtml ^/posts/([^/]+)\.html$
+redir @postHtml /posts/{re.postHtml.1}/ 308
+
+try_files {path} {path}/ {path}/index.html
+file_server

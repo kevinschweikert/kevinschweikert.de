@@ -1,0 +1,5 @@
+kevinschweikert.de {
+	root * /static/blog
+	import blog.part
+	import badpaths
+}

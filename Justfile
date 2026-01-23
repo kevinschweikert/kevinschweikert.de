@@ -11,5 +11,7 @@ dev:
 watch:
     find src/ assets/ -type f | entr -d just dev
 
-deploy: build
-    rsync -avz --delete --no-perms --no-owner --no-group --omit-dir-times priv/ margherita:/opt/caddy/static/blog/
+deploy server: build
+    rsync -avz --delete --no-perms --no-owner --no-group --omit-dir-times priv/ {{server}}:/opt/caddy/static/blog/
+    rsync -avz --no-perms --no-owner --no-group --omit-dir-times caddy/ {{server}}:/opt/caddy/sites/
+    ssh {{server}} sudo podman exec caddy caddy reload --config /etc/caddy/Caddyfile
