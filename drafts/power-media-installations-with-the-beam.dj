@@ -1,0 +1,200 @@
+---
+title = "Part 1: Power media installations with the BEAM and OTP" 
+description = "TODO"
+published = 2026-01-23
+---
+
+When you think about large-scale media installations—from LED video walls to lighting control for a whole building—you might imagine specialized tools and proprietary software. But Elixir and the OTP platform can be enough for robust, (soft) real-time media control systems.
+
+* Network communication: fixtures, media servers, audio gear and other devices use UDP/TCP. Treat each device as its own process for many simultaneous connections with `gen_udp` / `gen_tcp`, and use Erlang’s `alarm_handler` to keep you informed when things go wrong.
+* State management: media servers are stateful and complex. Use `gen_statem` to mirror state in the app and `ETS` for fast lookups on device configuration and status.
+* File sync: large media files must move between systems without exhausting memory. `Stream` and `ssh_sftp` work together for this goal.
+* System integration: parse XML configs with `:xmerl`, control remote systems via `:ssh`.
+* Binary protocols: lighting fixtures speak Art-Net. Binary pattern matching helps to parse and build packets in a straightforward way.
+
+The tools for building robust systems that talk to the physical world are already in your toolbox.
+
+While writing this post, I decided to split it into multiple parts. This way we can take a deeper look and maybe this can evolve into a longer series, how the BEAM and OTP are used in a media focused environment.
+
+## Background
+
+Recently I was tasked with integrating a new media server to our product at work. It's the [Picturall Pro Mark II](https://www.analogway.com/products/picturall-pro-mark-ii) which was developed around 2010 and has proven it's value since. After finishing the task I looked back and noticed that I didn't have to install any libraries and could do everything with tools from OTP. Let me show you! 
+
+## Connections as Actors
+
+This is what OTP was made for. Telecommunication and networking. Let me show you a simple `GenServer` implementation as a starting point.
+
+```elixir
+def start_link(opts), do: GenServer.start_link(__MODULE__, opts)
+
+@impl GenServer
+def init(opts) do
+  opts = Keyword.validate!(opts, [:address, :port])
+  address = Keyword.fetch!(opts, :address) |> String.to_charlist()
+  port = Keyword.fetch!(opts, :port)
+
+
+  state = %{address: address, port: port}
+  {:ok, state, {:continue, :connect}}
+end
+```
+
+This is the minimal setup. In `init/1` we just extract the needed data from the options and put them in our initial state to not block the startup of other processes. Then we can initiate the connection.
+   
+```elixir
+@default_backoff 500
+
+@impl GenServer
+def handle_continue(:connect, %{address: address, port: port} = state) do
+  socket_opts =
+    [
+      mode: :binary,
+      packet: :line,
+      reuseaddr: true,
+      buffer: 20_000,
+      keepalive: true,
+      nodelay: true,
+      send_timeout: 1000,
+      send_timeout_close: true
+    ]
+
+  case :gen_tcp.connect(address, port, socket_opts, to_timeout(second: 5)) do
+    {:ok, socket} ->
+      {:noreply, %{state | socket: socket, current_backoff: @default_backoff}}
+
+    {:error, error} ->
+      Logger.error("connection failed: #{:inet.format_error(error)}")
+
+      schedule_reconnect()
+      {:noreply, state}
+  end
+end
+```
+
+The beauty here is that we don't have to optimize for performance because we're mapping each GenServer to a physical device. The protocol is newline-delimited so we can let OTP do the buffering with `buffer: 20_000` and `packet: line`, so that each message in `handle_info/2` is a complete message.
+
+```elixir
+@impl GenServer
+def handle_info({:tcp, socket, payload}, %{socket: socket} = state) do
+  # do something with message here
+end
+```
+
+Because we can have at least a connected and disconnected state, it makes sense to model this in a state machine. Jump down to [State Management] if you want to see, how we can refactor this to `:gen_statem`.
+
+## Alarms
+
+Since i've heard Frank Hunleth talked about [`alarm_handler`](https://erlang.org/doc/man/alarm_handler.html) in Erlang I use them all the time to track boolean states at runtime. The API is very simple. It's only three functions:
+
+* `set_alarm/1`
+* `get_alarms/0`
+* `clear_alarm/1`
+
+I don't even have to explain what they're doing - it's so simple. Let's look at how we could introduce it to our connection logic.
+
+```elixir
+case :gen_tcp.connect(address, port, socket_opts, to_timeout(second: 5)) do
+  {:ok, socket} ->
+    clear_alarm(:device_connection)
+    {:noreply, %{state | socket: socket}}
+
+  {:error, error} ->
+    description =  :inet.format_error(error)
+    set_alarm({:device_connection, description})
+
+    schedule_reconnect()
+    {:noreply, state}
+end
+```
+
+On a successful connection we make sure to clean the alarm and on failure we raise the alarm. Done. This information can be used in health checks or in the UI to let the users know, that there's a problem. If you need to compose alarms together or want to subscribe to changes of an alarm, I can recomment the [`Alarmist`](https://hex.pm/packages/alarmist) package.
+
+## State Management
+
+I first started with a GenServer solution, because that's what I was familiar with. But after some research I stumbled upon this wonderful article from Andrea Leopardi [Persistent connections with gen_statem](https://andrealeopardi.com/posts/connection-managers-with-gen-statem/). I translated it into the following.
+
+```elixir
+@impl :gen_statem
+def callback_mode do
+  [:state_functions, :state_enter]
+end
+
+def start_link(opts), do: :gen_statem.start_link({:local, __MODULE__}, __MODULE__, opts, [])
+
+def child_spec(args) do
+  %{
+    id: __MODULE__,
+    start: {__MODULE__, :start_link, [args]},
+    restart: :permanent,
+    shutdown: 5000,
+    type: :worker
+  }
+end
+  
+@impl :gen_statem
+def init(opts) do
+  opts = Keyword.validate!(opts, [:address, :port])
+  address = Keyword.fetch!(opts, :address) |> String.to_charlist()
+  port = Keyword.fetch!(opts, :port)
+
+
+  data = %{address: address, port: port}
+  actions = [{:next_event, :internal, :connect}]
+  {:ok, :disconnected, data, actions}
+end
+```
+
+It pretty much looks mostly like a GenServer but with some important differences. In `callback_mode/0` we specify how we want to handle state changes. In `init/1` we tell `gen_statem` what the initial state is (`:disconnected`) and optional actions (`:connect`). This gets handled in the `disconnected/3` function because here we're using `:state_functions` as the callback mode.
+
+```elixir
+def disconnected(:internal, :connect, %{address: address, port: port} = data) do
+  socket_opts =
+    [
+      mode: :binary,
+      packet: :line,
+      reuseaddr: true,
+      buffer: 20000,
+      keepalive: true,
+      nodelay: true,
+      send_timeout: 1000,
+      send_timeout_close: true
+    ]
+
+  case :gen_tcp.connect(address, port, socket_opts, to_timeout(second: 5)) do
+    {:ok, socket} ->
+      {:next_state, :connected, %{data | socket: socket}}
+
+    {:error, error} ->
+      Logger.error("connection failed: #{:inet.format_error(error)}")
+
+      {data, actions} = schedule_reconnect(data)
+      {:keep_state, data, actions}
+  end
+end
+```
+
+This is the same code we've already seen with the distinction, that we transition to the `:connected` state on a successful connection and stay in the `:disconnected` state if not.
+
+```elixir
+def disconnected(:enter, :disconnected, _data) do
+  clear_alarm(:device_connection)
+  :keep_state_and_data
+end
+
+def disconnected(:enter, :connected, data) do
+  set_alarm(:device_connection)
+  {data, actions} = schedule_reconnect(data)
+  {:keep_state, data, actions}
+end
+```
+
+These two clauses handle the state transition event and are a perfect place to put our alarm handlers.
+  
+```elixir
+def disconnected(:info, _, _) do
+  :keep_state_and_data
+end
+```
+
+If we receive a packet in the disconnected state we just ignore it. This is just a slice of the final implementation, which got more internal states than connected/disconnected and handles more types of messages. But it should give you an impression on how nicely the TCP connection life cycle maps to a state machine and therefore `gen_statem`.
+
