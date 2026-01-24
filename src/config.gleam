@@ -8,6 +8,10 @@ pub fn root_url() {
   "https://" <> domain()
 }
 
+pub fn repo() {
+  "https://github.com/kevinschweikert/kevinschweikert.de"
+}
+
 pub fn url(segment: String) -> uri.Uri {
   let assert Ok(uri) = uri.parse(root_url() <> segment)
   uri

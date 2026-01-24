@@ -1,5 +1,8 @@
+import config
+import git
 import gleam/list
 import gleam/option
+import gleam/order
 import gleam/result
 import gleam/string
 import gleam/time/calendar
@@ -23,6 +26,8 @@ pub type Post {
     updated: option.Option(calendar.Date),
     summary: String,
     elements: List(element.Element(Nil)),
+    git_short_hash: option.Option(String),
+    git_hash: option.Option(String),
   )
 }
 
@@ -61,10 +66,35 @@ pub fn get_posts(highlighter) {
   let assert Ok(title) = tom.get_string(metadata, ["title"])
   let assert Ok(summary) = tom.get_string(metadata, ["summary"])
   let assert Ok(published) = tom.get_date(metadata, ["published"])
-  let updated = tom.get_date(metadata, ["updated"]) |> option.from_result()
+
+  let git_short_hash =
+    git.short_hash("src/pages/posts/" <> filename) |> option.from_result()
+  let git_hash =
+    git.full_hash("src/pages/posts/" <> filename) |> option.from_result()
+
+  let last_changed_at = git.last_changed_at("src/pages/posts/" <> filename)
+
+  let updated = case last_changed_at {
+    Ok(up) ->
+      case calendar.naive_date_compare(up, published) {
+        order.Lt | order.Eq -> option.None
+        order.Gt -> option.Some(up)
+      }
+    Error(_) -> option.None
+  }
 
   let post =
-    Post(draft:, slug:, title:, summary:, published:, updated:, elements:)
+    Post(
+      draft:,
+      slug:,
+      title:,
+      summary:,
+      published:,
+      updated:,
+      elements:,
+      git_short_hash:,
+      git_hash:,
+    )
     |> layout()
   Ok(post)
 }
@@ -75,16 +105,36 @@ fn layout(post: Post) -> Post {
     attribute.attribute("datetime", helper.date_to_string(date))
   }
 
-  let updated = case post.updated {
-    option.Some(updated) -> [
-      html.text(" - "),
-      html.time([attribute.class("text-sm"), datetime(updated)], [
-        html.text("updated on "),
-        html.text(updated |> helper.date_to_humanized_string),
-      ]),
-    ]
-    option.None -> []
-  }
+  let hash =
+    case post.git_short_hash, post.git_hash {
+      option.Some(short_hash), option.Some(hash) -> [
+        html.text(" · "),
+        html.a(
+          [
+            attribute.class("text-sm"),
+            attribute.href(config.repo() <> "/commit/" <> hash),
+          ],
+          [
+            html.text(short_hash),
+          ],
+        ),
+      ]
+      _, _ -> []
+    }
+    |> element.fragment()
+
+  let updated =
+    case post.updated {
+      option.Some(updated) -> [
+        html.text(" · "),
+        html.time([attribute.class("text-sm"), datetime(updated)], [
+          html.text("updated on "),
+          html.text(updated |> helper.date_to_humanized_string),
+        ]),
+      ]
+      option.None -> []
+    }
+    |> element.fragment()
 
   let published =
     html.time([attribute.class("text-sm"), datetime(post.published)], [
@@ -93,8 +143,9 @@ fn layout(post: Post) -> Post {
         post.published
         |> helper.date_to_humanized_string,
       ),
-      ..updated
     ])
 
-  Post(..post, elements: [html.article([], [title, published, ..post.elements])])
+  Post(..post, elements: [
+    html.article([], [title, published, updated, hash, ..post.elements]),
+  ])
 }
