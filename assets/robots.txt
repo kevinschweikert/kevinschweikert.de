@@ -1,4 +1,8 @@
 User-agent: *
 Allow: /
 
+Disallow: /impress*
+Disallow: /gdpr*
+
 Sitemap: https://kevinschweikert.de/sitemap.xml
+

@@ -1,6 +1,6 @@
 ---
-summary = "Learn how to integrate Elixir applications and Nerves devices into Home Assistant using MQTT"
 title = "Build Home Assistant Devices with Elixir and Nerves"
+description = "Learn how to integrate Elixir applications and Nerves devices into Home Assistant using MQTT"
 published = 2026-01-18
 draft = false
 ---

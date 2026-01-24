@@ -1,159 +1,154 @@
+import component
 import config
 import envoy
-import gleam/dict
-import gleam/io
+import feed
+import filepath
 import gleam/list
 import gleam/option
 import gleam/result
+import gleam/time/calendar
+import gleam/time/duration
+import gleam/time/timestamp
 import helper
-import page.{Page, Website}
+import index
+import layout
+import lustre/element
+import page
+import route
 import simplifile
 import sitemap
 import typst
 
-// Some functions for rendering pages
-import feed
-import index
-import layout
-import post
+const out_dir = "./priv"
 
-import glimra
-import glimra/theme
+const pages_path = "./src/pages"
 
-// Import the static site generator
-import lustre/ssg
+const post_path = "./src/pages/posts"
+
+const index_path = "./src/index.gleam"
+
+const typst_template_path = "./src/template.typ"
 
 pub fn main() {
+  let start = timestamp.system_time()
+
   let blog_env = envoy.get("BLOG_ENV") |> result.unwrap("PROD")
   let show_draft = case blog_env {
     "PROD" | "prod" -> False
     _ -> True
   }
 
-  let syntax_highlighter =
-    glimra.new_syntax_highlighter()
-    |> glimra.set_theme(theme.default_theme())
+  case simplifile.is_directory(out_dir) {
+    Ok(True) -> {
+      let assert Ok(Nil) = simplifile.delete(out_dir)
+      Nil
+    }
+    Ok(False) -> Nil
+    Error(_) -> panic
+  }
 
-  // TODO: don't hide error as empty list
-  let posts = post.get_posts(syntax_highlighter) |> result.unwrap([])
+  let assert Ok(_) = simplifile.copy_directory("./assets", out_dir)
+
   let posts =
-    posts |> list.filter(fn(post) { post.draft == False || show_draft })
+    post_path
+    |> page.from_folder(fn(slug) { page.Article(slug) })
+    |> list.filter(fn(page) { page.is_published(page) || show_draft })
 
-  let route_info =
-    posts
-    |> list.map(fn(post) {
-      #(
-        post.slug,
-        Page(
-          title: post.title,
-          description: post.summary,
-          url: config.url("/posts/" <> post.slug),
-          page_type: page.Article,
-          image: option.Some(config.url("/images/" <> post.slug <> ".png")),
-          elements: post.elements,
-        ),
-      )
-    })
-    |> dict.from_list()
+  let pages =
+    pages_path
+    |> page.from_folder(fn(slug) { page.Site(slug) })
+    |> list.filter(fn(page) { page.is_published(page) || show_draft })
 
   let index =
-    Page(
-      title: config.title(),
-      description: config.description(),
-      url: config.url("/"),
-      page_type: Website,
-      image: option.None,
-      elements: index.elements(posts),
+    page.Page(
+      route: page.Home,
+      status: page.Published(calendar.Date(
+        2026,
+        calendar.month_from_int(1) |> result.lazy_unwrap(fn() { panic }),
+        18,
+      )),
+      src: page.Elements(
+        index.view(posts),
+        origin_path: option.Some(index_path),
+      ),
+      meta: page.Meta(
+        title: index.title,
+        description: index.description,
+        image: page.Generated,
+        author: config.author(),
+      ),
     )
 
-  let about =
-    Page(
-      title: "About",
-      description: "A page about me",
-      url: config.url("/about"),
-      page_type: Website,
-      image: option.None,
-      elements: page.elements_from_file("about.dj"),
-    )
+  create_page(page.rel_path(index), layout.root(index))
 
-  let contact =
-    Page(
-      title: "Contact",
-      description: "How you can contact me",
-      url: config.url("/contact"),
-      page_type: Website,
-      image: option.None,
-      elements: page.elements_from_file("contact.dj"),
-    )
-
-  let uses =
-    Page(
-      title: "Uses",
-      description: "What i am using",
-      url: config.url("/uses"),
-      page_type: Website,
-      image: option.None,
-      elements: page.elements_from_file("uses.dj"),
-    )
-
-  let now =
-    Page(
-      title: "Now",
-      description: "What's up with me right now",
-      url: config.url("/now"),
-      page_type: Website,
-      image: option.None,
-      elements: page.elements_from_file("now.dj"),
-    )
-  let impress =
-    Page(
-      title: "Impress",
-      description: "Legal stuff",
-      url: config.url("/impress"),
-      page_type: Website,
-      image: option.None,
-      elements: page.elements_from_file("impress.dj"),
-    )
-
-  let feed = feed.build(config.title(), posts)
-
-  let assert Ok(Nil) =
-    sitemap.build(posts) |> simplifile.write("./assets/sitemap.xml", _)
-
-  let assert Ok(markup) = simplifile.read("src/template.typ")
-  list.each(posts, fn(post) {
-    let assert Ok(png) =
-      typst.new(markup)
-      |> typst.add_binding("title", post.title)
-      |> typst.add_binding("summary", post.summary)
-      |> typst.add_binding(
-        "date",
-        post.published |> helper.date_to_humanized_string(),
-      )
-      |> typst.add_binding("domain", config.domain())
-      |> typst.render()
-
-    simplifile.write_bits("assets/images/" <> post.slug <> ".png", png)
+  list.each(pages, fn(page) {
+    create_page(page.rel_path(page), layout.root(page))
+  })
+  list.each(posts, fn(page) {
+    create_page(page.rel_path(page), layout.root(page))
   })
 
-  let build =
-    ssg.new("./priv")
-    |> ssg.add_static_route(index.url.path, layout.layout(index))
-    |> ssg.add_static_route(about.url.path, layout.layout(about))
-    |> ssg.add_static_route(contact.url.path, layout.layout(contact))
-    |> ssg.add_static_route(uses.url.path, layout.layout(uses))
-    |> ssg.add_static_route(now.url.path, layout.layout(now))
-    |> ssg.add_static_route(impress.url.path, layout.layout(impress))
-    |> ssg.add_dynamic_route("/posts", route_info, layout.layout)
-    |> ssg.add_static_dir("./assets")
-    |> ssg.add_static_xml("/feed", feed)
-    |> ssg.build
+  [index]
+  |> list.append(pages)
+  |> list.append(posts)
+  |> list.filter_map(page.to_sitemap_item)
+  |> sitemap.build()
+  |> component.to_xml_docstring()
+  |> write_file(filepath.join(out_dir, "sitemap.xml"), _)
 
-  case build {
-    Ok(_) -> io.println("Build succeeded!")
-    Error(e) -> {
-      echo e
-      io.println("Build failed!")
+  posts
+  |> list.filter_map(page.to_feed_item)
+  |> feed.build()
+  |> component.to_xml_docstring()
+  |> write_file(filepath.join(out_dir, "feed.xml"), _)
+
+  let assert Ok(markup) = simplifile.read(typst_template_path)
+
+  [index]
+  |> list.append(pages)
+  |> list.append(posts)
+  |> list.each(create_image(markup, _))
+
+  let end = timestamp.system_time()
+
+  timestamp.difference(start, end) |> duration.approximate() |> echo
+}
+
+fn create_page(path: route.Rel, element: element.Element(a)) -> Nil {
+  let path = route.fs_rel_path(path)
+
+  out_dir
+  |> filepath.join(path)
+  |> write_file(element.to_document_string(element))
+}
+
+fn create_image(markup: String, page: page.Page) {
+  case page.og_image_url(page) {
+    option.Some(rel) -> {
+      let assert Ok(png) =
+        typst.new(markup)
+        |> typst.add_binding("title", page.meta.title)
+        |> typst.add_binding("description", page.meta.description)
+        |> typst.add_binding(
+          "date",
+          page.published_date(page.status)
+            |> helper.date_to_humanized_string(),
+        )
+        |> typst.add_binding("domain", config.domain())
+        |> typst.render()
+
+      rel
+      |> route.fs_rel_path()
+      |> filepath.join(out_dir, _)
+      |> simplifile.write_bits(png)
     }
+    option.None -> Ok(Nil)
   }
+}
+
+fn write_file(to path: String, write contents: String) -> Nil {
+  let assert Ok(Nil) =
+    simplifile.create_directory_all(filepath.directory_name(path))
+  let assert Ok(Nil) = simplifile.write(contents, to: path)
+  Nil
 }

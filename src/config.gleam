@@ -1,30 +1,15 @@
-import gleam/uri
-
-pub fn domain() {
+pub fn domain() -> String {
   "kevinschweikert.de"
 }
 
-pub fn root_url() {
+pub fn root_url() -> String {
   "https://" <> domain()
 }
 
-pub fn repo() {
+pub fn repo() -> String {
   "https://github.com/kevinschweikert/kevinschweikert.de"
 }
 
-pub fn url(segment: String) -> uri.Uri {
-  let assert Ok(uri) = uri.parse(root_url() <> segment)
-  uri
-}
-
-pub fn author() {
+pub fn author() -> String {
   "Kevin Schweikert"
-}
-
-pub fn title() {
-  author()
-}
-
-pub fn description() {
-  "Hi! I'm Kevin Schweikert, a software engineer with a media technology background and a passion for neapolitan pizza 🍕"
 }

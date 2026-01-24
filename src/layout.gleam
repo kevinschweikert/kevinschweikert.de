@@ -3,22 +3,23 @@ import gleam/option
 import lustre/attribute
 import lustre/element
 import lustre/element/html
-import lustre/ssg/opengraph
+import opengraph
 import page
+import route
 
 const plausible_source = "https://plausible.kevinschweikert.de/js/pa-Xjy2lqLyTD7zfUCRDjM3k.js"
 
 const plausible_script = "window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
   plausible.init()"
 
-pub fn layout(page: page.Page(a)) {
+pub fn root(page: page.Page) {
   html.html([attribute.lang("en")], [
     html.head([], [
-      html.title([], page.title),
+      html.title([], page.meta.title),
       html.meta([attribute.attribute("charset", "utf-8")]),
       html.meta([
         attribute.name("description"),
-        attribute.content(page.description),
+        attribute.content(page.meta.description),
       ]),
       html.link([
         attribute.rel("preconnect"),
@@ -49,22 +50,24 @@ pub fn layout(page: page.Page(a)) {
         attribute.rel("stylesheet"),
         attribute.href("/style.css"),
       ]),
-      opengraph.description(page.description),
-      opengraph.title(page.title),
-      opengraph.url(page.url),
+      opengraph.description(page.meta.description),
+      opengraph.title(page.meta.title),
+      opengraph.url(page.abs_path(page)),
+
       {
-        case page.page_type {
-          page.Website -> opengraph.website()
-          page.Article ->
+        case page.route {
+          page.Article(_) ->
             html.meta([
               attribute.attribute("property", "og:type"),
               attribute.content("article"),
             ])
+          _ -> opengraph.website()
         }
       },
       {
-        case page.image {
-          option.Some(image) -> opengraph.image(image)
+        case page.og_image_url(page) {
+          option.Some(rel) ->
+            opengraph.image(rel |> route.abs() |> route.abs_uri())
           option.None -> element.fragment([])
         }
       },
@@ -98,7 +101,7 @@ pub fn layout(page: page.Page(a)) {
               "flex-1 min-w-0 w-full max-w-prose mx-auto prose dark:prose-invert prose-catppuccin prose-img:rounded-lg  prose-a:no-underline prose-a:hover:underline prose-pre:text-ctp-base dark:prose-pre:text-ctp-text",
             ),
           ],
-          page.elements,
+          page.to_elements(page),
         ),
         html.footer(
           [
@@ -122,7 +125,7 @@ pub fn layout(page: page.Page(a)) {
                 html.text("Gleam"),
               ]),
               html.text(" and "),
-              html.a([attribute.href("https://github.com/lustre-labs/ssg")], [
+              html.a([attribute.href("https://github.com/lustre-labs/lustre")], [
                 html.text("Lustre"),
               ]),
             ]),

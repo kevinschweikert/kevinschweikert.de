@@ -1,3 +1,4 @@
+import component
 import gleam/bool
 import gleam/dict
 import gleam/int
@@ -9,25 +10,19 @@ import helper
 import lustre/attribute
 import lustre/element
 import lustre/element/html
-import post
+import page
 
-pub fn title() {
-  "kevinschweikert.de"
-}
+pub const title = "kevinschweikert.de"
 
-pub fn elements(posts: List(post.Post)) -> List(element.Element(a)) {
+pub const description = "Hi! I'm Kevin Schweikert, a software engineer with a media technology background and a passion for neapolitan pizza 🍕"
+
+pub fn view(posts: List(page.Page)) -> List(element.Element(a)) {
   let posts_by_year =
     posts
-    |> list.group(fn(post) { post.published.year })
+    |> list.group(fn(post) { page.published_date(post.status).year })
     |> dict.to_list()
     |> list.sort(fn(a, b) { int.compare(b.0, a.0) })
   [
-    html.h1([], [html.text("kevinschweikert.de")]),
-    html.p([], [
-      html.text(
-        "Hi! I'm Kevin Schweikert, a software engineer with a media technology background and a passion for neapolitan pizza 🍕",
-      ),
-    ]),
     html.h2([], [html.text("Articles")]),
     html.div([], [
       {
@@ -49,43 +44,49 @@ pub fn elements(posts: List(post.Post)) -> List(element.Element(a)) {
   ]
 }
 
-fn post_list(posts: List(post.Post)) -> element.Element(a) {
+fn post_list(posts: List(page.Page)) -> element.Element(a) {
   let posts = posts |> list.sort(posts_by_date)
   html.ol([attribute.class("list-none ps-0")], list.map(posts, post_item))
 }
 
-fn posts_by_date(post_a: post.Post, post_b: post.Post) -> order.Order {
-  calendar.naive_date_compare(post_b.published, post_a.published)
+fn posts_by_date(post_a: page.Page, post_b: page.Page) -> order.Order {
+  let date_b = post_b.status |> page.published_date()
+  let date_a = post_a.status |> page.published_date()
+  calendar.naive_date_compare(date_b, date_a)
 }
 
-fn post_item(post: post.Post) -> element.Element(a) {
+fn post_item(post: page.Page) -> element.Element(a) {
   html.li([], [
     html.a(
       [
         attribute.class("font-bold text-lg"),
-        attribute.href("/posts/" <> post.slug <> ".html"),
+        post |> page.rel_path() |> component.relative_href(),
       ],
       [
-        html.text(post.title),
+        html.text(post.meta.title),
       ],
     ),
     html.p([attribute.class("text-sm mt-0")], [
       html.time(
         [
-          attribute.attribute("datetime", helper.date_to_string(post.published)),
+          attribute.attribute(
+            "datetime",
+            post.status |> page.published_date() |> helper.date_to_string(),
+          ),
         ],
         [
           html.text(abbr_post_date(post)),
         ],
       ),
       html.text(" · "),
-      html.text(post.summary),
+      html.text(post.meta.description),
     ]),
   ])
 }
 
-fn abbr_post_date(post: post.Post) -> String {
-  let calendar.Date(year: _, month:, day:) = post.published
+fn abbr_post_date(post: page.Page) -> String {
+  let calendar.Date(year: _, month:, day:) =
+    post.status |> page.published_date()
   let month_abbr = case month {
     calendar.January -> "JAN"
     calendar.February -> "FEB"

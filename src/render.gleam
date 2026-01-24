@@ -1,11 +1,15 @@
+import djot
 import gleam/dict
 import gleam/option
-import glimra
 import lustre/attribute
 import lustre/element/html
-import lustre/ssg/djot
 
-pub fn custom_renderer(_metadata, highlighter) {
+pub type Source {
+  Markdown(content: String, path: String)
+  Djot(content: String, path: String)
+}
+
+pub fn render_djot() {
   let to_attributes = fn(attrs) {
     use attrs, key, val <- dict.fold(attrs, [])
     [attribute.attribute(key, val), ..attrs]
@@ -14,7 +18,7 @@ pub fn custom_renderer(_metadata, highlighter) {
   let base = djot.default_renderer()
   djot.Renderer(
     ..base,
-    codeblock: glimra.codeblock_renderer(highlighter),
+    // codeblock: glimra.codeblock_renderer(highlighter),
     image: fn(destination, attributes, alt) {
       let attributes = to_attributes(attributes)
       case destination {
