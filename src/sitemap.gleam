@@ -1,6 +1,7 @@
 import gleam/int
 import gleam/list
 import gleam/time/calendar
+import helper
 import lustre/attribute
 import lustre/element
 import page
@@ -39,14 +40,9 @@ fn loc(url: String) {
 }
 
 fn lastmod(date: calendar.Date) {
-  let calendar.Date(year:, month:, day:) = date
-  let datestring =
-    int.to_string(year)
-    <> "-"
-    <> month |> calendar.month_to_int() |> int.to_string()
-    <> "-"
-    <> int.to_string(day)
-  element.element("lastmod", [], [element.text(datestring)])
+  element.element("lastmod", [], [
+    date |> helper.date_to_string() |> element.text(),
+  ])
 }
 // fn changefreq(freq: String) {
 //   element.element("changefreq", [], [element.text(freq)])
