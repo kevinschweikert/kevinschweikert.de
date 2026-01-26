@@ -18,6 +18,12 @@ pub fn root(page: page.Page) {
       html.title([], page.meta.title),
       html.meta([attribute.attribute("charset", "utf-8")]),
       html.meta([
+        attribute.rel("canonical"),
+        attribute.href(
+          page |> page.rel_path() |> route.abs() |> route.abs_string(),
+        ),
+      ]),
+      html.meta([
         attribute.name("description"),
         attribute.content(page.meta.description),
       ]),
@@ -67,7 +73,7 @@ pub fn root(page: page.Page) {
       {
         case page.og_image_url(page) {
           option.Some(rel) ->
-            opengraph.image(rel |> route.abs() |> route.abs_uri())
+            opengraph.image(rel |> route.abs() |> route.abs_string())
           option.None -> element.fragment([])
         }
       },
@@ -87,11 +93,11 @@ pub fn root(page: page.Page) {
               ),
             ],
             [
-              html.a([attribute.href("/index.html")], [html.text("Home")]),
-              html.a([attribute.href("/about.html")], [html.text("About")]),
-              html.a([attribute.href("/contact.html")], [html.text("Contact")]),
-              html.a([attribute.href("/now.html")], [html.text("Now")]),
-              html.a([attribute.href("/uses.html")], [html.text("Uses")]),
+              html.a([attribute.href("/")], [html.text("Home")]),
+              html.a([attribute.href("/about/")], [html.text("About")]),
+              html.a([attribute.href("/contact/")], [html.text("Contact")]),
+              html.a([attribute.href("/now/")], [html.text("Now")]),
+              html.a([attribute.href("/uses/")], [html.text("Uses")]),
             ],
           ),
         ]),

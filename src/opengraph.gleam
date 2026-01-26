@@ -2,8 +2,8 @@
 // IMPORTS ---------------------------------------------------------------------
 
 import gleam/int
-import gleam/uri
 import lustre/attribute.{attribute}
+import lustre/element
 import lustre/element/html
 import route
 
@@ -35,10 +35,10 @@ pub fn site_name(content) {
   html.meta([attribute("property", "og:site_name"), attribute.content(content)])
 }
 
-pub fn image(content) {
+pub fn image(url: String) -> element.Element(a) {
   html.meta([
     attribute("property", "og:image"),
-    attribute.content(uri.to_string(content)),
+    attribute.content(url),
   ])
 }
 

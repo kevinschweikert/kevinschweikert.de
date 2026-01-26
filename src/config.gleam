@@ -1,9 +1,12 @@
+import gleam/uri
+
 pub fn domain() -> String {
   "kevinschweikert.de"
 }
 
-pub fn root_url() -> String {
-  "https://" <> domain()
+pub fn root_url() -> uri.Uri {
+  let assert Ok(root) = uri.parse("https://" <> domain())
+  root
 }
 
 pub fn repo() -> String {

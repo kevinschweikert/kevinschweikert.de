@@ -1,7 +1,6 @@
 import gleam/int
 import gleam/list
 import gleam/time/calendar
-import gleam/uri
 import lustre/attribute
 import lustre/element
 import page
@@ -12,7 +11,7 @@ pub fn build(items: List(page.SitemapItem)) {
     use item <- list.map(items)
 
     url([
-      loc(item.url |> route.abs_uri()),
+      loc(item.url |> route.abs_string()),
       lastmod(item.lastmod),
     ])
   })
@@ -35,8 +34,8 @@ fn url(children: List(element.Element(a))) -> element.Element(a) {
   element.element("url", [], children)
 }
 
-fn loc(url: uri.Uri) {
-  element.element("loc", [], [element.text(uri.to_string(url))])
+fn loc(url: String) {
+  element.element("loc", [], [element.text(url)])
 }
 
 fn lastmod(date: calendar.Date) {

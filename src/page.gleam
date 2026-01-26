@@ -181,11 +181,11 @@ pub fn stem(route: Route) -> String {
 
 pub fn rel_path(page: Page) -> route.Rel {
   case page.route {
-    Home -> "/index.html"
-    Site(slug:) -> "/" <> slug <> ".html"
-    Article(slug:) -> "/posts/" <> slug <> ".html"
+    Home -> "/"
+    Site(slug:) -> "/" <> slug
+    Article(slug:) -> "/posts/" <> slug
   }
-  |> route.rel_from_string()
+  |> route.rel_page
 }
 
 pub fn abs_path(page: Page) -> route.Abs {
@@ -199,7 +199,7 @@ pub fn og_image_url(page: Page) -> option.Option(route.Rel) {
     None -> option.None
     Generated ->
       { "/images/og-" <> stem(page.route) <> ".png" }
-      |> route.rel_from_string
+      |> route.rel_file
       |> option.Some()
     File(url:) -> url |> option.Some()
   }
