@@ -106,7 +106,7 @@ pub fn root(page: page.Page) {
         html.footer(
           [
             attribute.class(
-              "text-sm mt-4 p-1 flex flex-col items-center gap-2 ",
+              "text-sm mt-20 w-full p-1 flex flex-col items-center gap-2 ",
             ),
           ],
           [

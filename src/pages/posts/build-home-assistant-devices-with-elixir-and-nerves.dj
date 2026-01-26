@@ -484,3 +484,7 @@ I’d also love to integrate Homex into existing projects, for example:
 For the long term, [Matter](https://csa-iot.org/all-solutions/matter/) could be an option to not just support the Home Assistant use-case but integrate in the home automation hub of your choice. 
 
 Do you have ideas where Homex could improve or be used? [Let me know](/contact.html)
+
+## Update 2026-01-26
+
+I presented Homex in the [Nerves Meetup EU](https://nervesmeetup.eu/). Here's the link to the recording: [Bringing Nerves and Home Assistant together](https://www.youtube.com/watch?v=9Bu8JjFVjsM)
