@@ -1,7 +1,51 @@
 ---
 title = "Uses"
-description = "What i am using"
+description = "Uses"
 published = 2026-01-18
 draft = false
 ---
-Sorry, nothing to see here yet. Come again soon, to see what i'm using!
+
+## Dev Environment
+
+Currently, I do all my work on a MacBook Pro M3 with 36GB of RAM. I had always liked Apple products and this machine is no exception. The build quality and battery life are amazing. Though I'm getting more and more concerned about the operating system and i'm considering switching to Linux. I ran [Pop!_OS](https://system76.com/pop/) on my PC a few years ago but i think I would go with [Fedora](https://fedoraproject.org/) and Gnome this time.
+
+My input devices are a  Logitech MX Master 3 and [Nuphy Air 75](https://nuphy.com/products/air75). I've recently also bought a used [ZSA Moonlander](https://www.zsa.io/moonlander) but haven't found the time to get accustomed to it. My display is a [Dell P3424WE Ultrawide](https://www.dell.com/en-us/shop/dell-pro-34-plus-usb-c-hub-monitor-p3425we/apd/210-brhy/monitors-monitor-accessories). It has a built-in KVM[^kvm] switch so that i can seamlessly jump between two devices and use the same Mouse, Keyboard, camera and audio interface.
+
+If you're interested in my audio setup, it's a [Steinberg UR22 mK II](https://www.steinberg.net/audio-interfaces/ur22c-recording-pack/ur22mkii/) , [Yamaha HS5](https://usa.yamaha.com/products/proaudio/speakers/hs_series/index.html) speakers, [Beyerdynamic DT 770 Pro](https://www.beyerdynamic.de/p/dt-770-pro) headphones and a [Rode NT-1A](https://rode.com/products/nt1a) microphone. All of that is total overkill for just doing video conferences but i like having a professional setup.
+
+### Software
+
+My code editor journey started with Visual Studio Code. Then I became interested in the Vim keybindings and learned them. I used them in VSCode but soon began to like the terminal because there were all these nice plugins when you pair it with [Neovim](https://neovim.io/). Recently i switched to [Helix](https://helix-editor.com/) as my main editor because configuring still felt like a chore and I never felt completely confident doing it. Now i feel at home and even prefer the way Helix thinks.
+
+::: info
+My dotfiles are on [GitHub](https://github.com/kevinschweikert/dotfiles) but may need a bit of a refresh soon!
+:::
+
+My terminal of choice is [Kitty](https://sw.kovidgoyal.net/kitty/). I know Ghostty is the new kid in town but Kitty does everything i need and more so i see no reason to switch. For web browsing I use [Zen Browser](https://zen-browser.app/). I've used Arc before and I got used to the tab sidebar. But the team behind Arc discontinued it and it was using Google Chrome under the hood. Zen is using Firefox with a nice UI/UX layer on top. Win!
+
+Other mentionable software i use on a daily basis are [Shottr](https://shottr.cc/) to create screenshots. I couldn't imagine not using it. It's fantastic, try it out! I like to have windows in full frame when working, so i installed the [Aerospace](https://github.com/nikitabobko/AeroSpace) window manager for macOS. It's working great but because it's using some accessibility hacks there's sometimes weird quirks like windows getting stuck outside of the screen area and such. I've heard of [Paneru](https://github.com/karinushka/paneru) and thinking of giving that a try.
+
+## Hosting
+
+[Hetzner](https://www.hetzner.com/de/) is my provider of choice. They host my domains, my emails and my cloud server. They're based in Germany and that's where i want to have my data and GDPR guarantees. Currently, I only have one cloud server called `margherita` which is running [Rocky Linux](https://rockylinux.org/). I've extensively used Debian and derivatives but decided to try something new. So far it's great. I'm running [Plausible](https://plausible.io/) for analytics and [Caddy](https://caddyserver.com/) as Podman [Quadlets](https://docs.podman.io/en/latest/markdown/podman-systemd.unit.5.html). I deploy and at the same time document everything with [Ansible](https://github.com/ansible/ansible).
+
+## Pizza
+
+![Gozney Arc](/images/uses/gozney_arc.jpeg)
+
+Last year, I made the decision to buy a [Gozney Arc](https://de.gozney.com/products/arc) pizza oven. My home baking oven is limited in it's capabilities to bake authentic neapolitan style pizza, because you need over 400 degrees Celsius to get the pizza done in about 60 to 90 seconds. The dough is made in my loved [Ankarsrum](https://www.ankarsrum.com/). It's built like a tank and will hopefully outlast me.
+
+
+## Coffee
+
+Before starting my pizza adventure, i got really interested in making coffee. I'm rocking a [Gaggia Classic](https://www.gaggia.com/manual-machines/new-classic-e24/) portafilter machine coupled with a [Mahlkoenig X54](https://www.mahlkoenig.com/products/x54-allround-home-grinder) grinder. They make delicious coffee and the only thing i may want to upgrade is the Gaggia. There's an interesting project called [Gaggimate](https://shop.gaggimate.eu/) which adds a micro-controller and touchscreen to this "dumb" machine for automatic timers, Bluetooth scale integration and pressure control. Nothing necessary but fun to have.
+
+## Camera
+
+When I got to know my stepfather he let me play around with his analog Canon A-1 single-lens reflex camera. I was fascinated and {-wasted-} {+enjoyed+}  many good films on it. But I improved over time and then digital cameras became cheaper and more affordable. This opened up a whole new world for me without restrictions and instant feedback. From then on, I had a camera with me wherever we went. Later I bought my first camera - a Canon 550D. A few years and many pictures passed, when I started studying media technology and everything shifted to filmmaking. Photography got lost in all that busyness.
+
+![Landscape in Norway](/images/uses/norway_landscape.jpeg)
+
+In 2025 my girlfriend and I went to Norway for three weeks with a campervan and I borrowed a camera. This reignited my passion for photography and so I bought a [Sony Alpha A6700](https://www.sony.de/interchangeable-lens-cameras/products/ilce-6700) with the [Sony 16-55mm 2.8 G](https://www.sony.de/electronics/kamera-objektive/sel1655g) and [Viltrox 28mm 4.5 Pancake](https://viltrox.com/products/28mm-f4-5-fe) lens. I hope in the future this blog can also include some work I create with this camera.
+
+[^kvm]: KVM stands for Keyboard, Video and Mouse

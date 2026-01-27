@@ -1,19 +1,22 @@
 ---
 title = "About"
-description= "A page about me"
+description= "Hi! I'm Kevin Schweikert, a software engineer with a media technology background and a passion for coffee, neapolitan pizza and photography."
 published = 2026-01-18
 draft = false
 ---
-Hi! I'm Kevin Schweikert, a software engineer with a media technology background and a passion for neapolitan pizza 🍕
+Hi! I'm Kevin Schweikert, a software engineer with a media technology background and a passion for coffee, neapolitan pizza and photography.
 
-### Media Technology
+![Me in Norway 2025](/images/norway_kevin.jpeg)
 
-I've studied media technology at the univerisity of applied sciences in Hamburg, Germany.
 
-### Software Engineer
+I've studied media technology at the university of applied sciences in Hamburg, Germany.
 
-Since 2020 i am working as a software engineer at [Intermediate Engineering GmbH](http://im-en.com) where we build custom software products for media installations
+During my studies, I worked as a freelance event technician, where I first got in touch with my current employer. In 2020, I joined [Intermediate Engineering GmbH](https://im-en.com) as a working student and gradually worked my way up to becoming a software engineer. We build custom software products for media installations, primarily written in Elixir.
 
-### Pizza
+That wasn’t my original plan when I started university. Back then, I simply wanted to do something related to media and technology. Programming was just one of many classes. That changed when my roommate showed me how to build a web app with a REST API in Node.js. From that moment on, programming became more and more interesting to me.
 
-In April 2024 i've had an amazing Pizza at a place called \"60 seconds to Napoli\" and felt the need to recreate this experience at home. So since then i am in a deep rabbit hole about pizza making and already invested in a professional pizza oven.
+For a while, I thought I had found my happy place with Go. But it wasn't until I discovered Elixir and functional programming. Since then, I’ve been living on the BEAM and advocating for it at work whenever I can.
+
+I really appreciate the spirit of open source. I’m active on the Elixir Forum and GitHub, and I try to give something back to the community for all the amazing tools I get to use every day and for free.
+
+Outside of programming, I spend most of my time on pizza, coffee, and photography. If you’re interested in gear, check out the [Uses](/uses/) page.
