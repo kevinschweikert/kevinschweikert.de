@@ -1,8 +1,8 @@
 ---
 title = "Composable SFTP streams in Elixir"
 description = "Stream files over SFTP using Elixir's Stream and Collectable protocols"
-published = 2026-04-25
-draft = true
+published = 2026-04-26
+draft = false
 ---
 
 ::: note
