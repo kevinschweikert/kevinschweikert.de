@@ -2,27 +2,27 @@
 # You typically do not need to edit this file
 
 packages = [
-  { name = "castore", version = "1.0.17", build_tools = ["mix"], requirements = [], otp_app = "castore", source = "hex", outer_checksum = "12D24B9D80B910DD3953E165636D68F147A31DB945D2DCB9365E441F8B5351E5" },
-  { name = "envoy", version = "1.1.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "envoy", source = "hex", outer_checksum = "850DA9D29D2E5987735872A2B5C81035146D7FE19EFC486129E44440D03FD832" },
+  { name = "envoy", version = "1.2.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "envoy", source = "hex", outer_checksum = "9C6FBB6BFA02A52798BEEC5977A738CAD6E4A057F4B67FD0C8061AD2502C191A" },
   { name = "filepath", version = "1.1.2", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "filepath", source = "hex", outer_checksum = "B06A9AF0BF10E51401D64B98E4B627F1D2E48C154967DA7AF4D0914780A6D40A" },
   { name = "frontmatter", version = "1.0.1", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "frontmatter", source = "hex", outer_checksum = "D7FF83A8D22A52867809681EE254A3F989169F92539299958879FE47737DAB7A" },
   { name = "gleam_erlang", version = "1.3.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "gleam_erlang", source = "hex", outer_checksum = "1124AD3AA21143E5AF0FC5CF3D9529F6DB8CA03E43A55711B60B6B7B3874375C" },
   { name = "gleam_json", version = "3.1.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "gleam_json", source = "hex", outer_checksum = "44FDAA8847BE8FC48CA7A1C089706BD54BADCC4C45B237A992EDDF9F2CDB2836" },
   { name = "gleam_otp", version = "1.2.0", build_tools = ["gleam"], requirements = ["gleam_erlang", "gleam_stdlib"], otp_app = "gleam_otp", source = "hex", outer_checksum = "BA6A294E295E428EC1562DC1C11EA7530DCB981E8359134BEABC8493B7B2258E" },
-  { name = "gleam_stdlib", version = "0.68.1", build_tools = ["gleam"], requirements = [], otp_app = "gleam_stdlib", source = "hex", outer_checksum = "F7FAEBD8EF260664E86A46C8DBA23508D1D11BB3BCC6EE1B89B3BC3E5C83FF1E" },
-  { name = "gleam_time", version = "1.6.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "gleam_time", source = "hex", outer_checksum = "0DF3834D20193F0A38D0EB21F0A78D48F2EC276C285969131B86DF8D4EF9E762" },
+  { name = "gleam_regexp", version = "1.1.1", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "gleam_regexp", source = "hex", outer_checksum = "9C215C6CA84A5B35BB934A9B61A9A306EC743153BE2B0425A0D032E477B062A9" },
+  { name = "gleam_stdlib", version = "0.71.0", build_tools = ["gleam"], requirements = [], otp_app = "gleam_stdlib", source = "hex", outer_checksum = "702F3BC2A14793906880B1078B19A6165F87323AEE8D0C4A34085846336FCAAE" },
+  { name = "gleam_time", version = "1.8.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "gleam_time", source = "hex", outer_checksum = "533D8723774D61AD4998324F5DD1DABDCDBFABAFB9E87CB5D03C6955448FC97D" },
   { name = "gleeunit", version = "1.9.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "gleeunit", source = "hex", outer_checksum = "DA9553CE58B67924B3C631F96FE3370C49EB6D6DC6B384EC4862CC4AAA718F3C" },
-  { name = "glimra", version = "2.0.2", build_tools = ["gleam"], requirements = ["gleam_stdlib", "jot", "lumis", "lustre", "simplifile"], source = "git", repo = "git@github.com:kevinschweikert/glimra.git", commit = "1cadd5a480dec5ec41cb450365e3b4e84e0ee7b3" },
-  { name = "houdini", version = "1.2.0", build_tools = ["gleam"], requirements = [], otp_app = "houdini", source = "hex", outer_checksum = "5DB1053F1AF828049C2B206D4403C18970ABEF5C18671CA3C2D2ED0DD64F6385" },
-  { name = "jot", version = "10.1.0", build_tools = ["gleam"], requirements = ["gleam_stdlib", "houdini", "splitter"], otp_app = "jot", source = "hex", outer_checksum = "8DFFC944CFC38428E767C677C84359BB90AE207A64AF228F89DF36CAECEC4175" },
-  { name = "lumis", version = "0.0.1", build_tools = ["mix"], requirements = [], otp_app = "lumis", source = "hex", outer_checksum = "0339CFF7EBB97C6DAA7F009354756D6D65678D9FB12E49E6919B03463E667DC8" },
-  { name = "lustre", version = "5.4.0", build_tools = ["gleam"], requirements = ["gleam_erlang", "gleam_json", "gleam_otp", "gleam_stdlib", "houdini"], otp_app = "lustre", source = "hex", outer_checksum = "40E097BABCE65FB7C460C073078611F7F5802EB07E1A9BFB5C229F71B60F8E50" },
-  { name = "rustler_precompiled", version = "0.8.4", build_tools = ["mix"], requirements = ["castore", "rustler"], otp_app = "rustler_precompiled", source = "hex", outer_checksum = "3B33D99B540B15F142BA47944F7A163A25069F6D608783C321029BC1FFB09514" },
-  { name = "simplifile", version = "2.3.2", build_tools = ["gleam"], requirements = ["filepath", "gleam_stdlib"], otp_app = "simplifile", source = "hex", outer_checksum = "E049B4DACD4D206D87843BCF4C775A50AE0F50A52031A2FFB40C9ED07D6EC70A" },
+  { name = "glimra", version = "2.0.2", build_tools = ["gleam"], requirements = ["gleam_stdlib", "lustre", "simplifile"], source = "git", repo = "git@github.com:kevinschweikert/glimra.git", commit = "1cadd5a480dec5ec41cb450365e3b4e84e0ee7b3" },
+  { name = "gtempo", version = "7.2.4", build_tools = ["gleam"], requirements = ["gleam_regexp", "gleam_stdlib", "gleam_time"], otp_app = "gtempo", source = "hex", outer_checksum = "997964753BB7E9D9EA7023B9DB401871410D17C8ED8AC897CB9F7BFC33B277ED" },
+  { name = "houdini", version = "1.2.1", build_tools = ["gleam"], requirements = [], otp_app = "houdini", source = "hex", outer_checksum = "6F8AC2F12974567FB744BEA66AC93CEB76AAEA19AD28564623F76CDA9BC26A85" },
+  { name = "jot", version = "11.0.0", build_tools = ["gleam"], requirements = ["gleam_stdlib", "houdini", "splitter"], otp_app = "jot", source = "hex", outer_checksum = "03FD7C6E3FFC91CE6751C42B7F02E24E9DE6D1488A384B6619B0E3AA457D0704" },
+  { name = "lustre", version = "5.6.0", build_tools = ["gleam"], requirements = ["gleam_erlang", "gleam_json", "gleam_otp", "gleam_stdlib", "houdini"], otp_app = "lustre", source = "hex", outer_checksum = "EE558CD4DB9F09FCC16417ADF0183A3C2DAC3E4B21ED3AC0CAE859792AB810CA" },
+  { name = "rustler_precompiled", version = "0.9.0", build_tools = ["mix"], requirements = ["rustler"], otp_app = "rustler_precompiled", source = "hex", outer_checksum = "471D97315BD3BF7B64623418B3693EEDD8E47DE3D1CB79A0AC8F9DA7D770D94C" },
+  { name = "simplifile", version = "2.4.0", build_tools = ["gleam"], requirements = ["filepath", "gleam_stdlib"], otp_app = "simplifile", source = "hex", outer_checksum = "7C18AFA4FED0B4CE1FA5B0B4BAC1FA1744427054EA993565F6F3F82E5453170D" },
   { name = "splitter", version = "1.2.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "splitter", source = "hex", outer_checksum = "3DFD6B6C49E61EDAF6F7B27A42054A17CFF6CA2135FF553D0CB61C234D281DD0" },
-  { name = "tom", version = "2.0.0", build_tools = ["gleam"], requirements = ["gleam_stdlib", "gleam_time"], otp_app = "tom", source = "hex", outer_checksum = "74D0C5A3761F7A7D06994755D4D5AD854122EF8E9F9F76A3E7547606D8C77091" },
-  { name = "typst", version = "0.2.2", build_tools = ["mix"], requirements = ["rustler", "rustler_precompiled"], otp_app = "typst", source = "hex", outer_checksum = "16FD7426EBA062BB312B664CED385EF36B4803577C6C068BF1A064D8456CC632" },
-  { name = "webls", version = "1.6.0", build_tools = ["gleam"], requirements = ["gleam_stdlib", "gleam_time"], otp_app = "webls", source = "hex", outer_checksum = "60508D36D6205763BC24D356B6864FFAA0623EF9172B94C1771A673854500C6C" },
+  { name = "tom", version = "2.0.2", build_tools = ["gleam"], requirements = ["gleam_stdlib", "gleam_time"], otp_app = "tom", source = "hex", outer_checksum = "234A842F3D087D35737483F5DFB6DE9839E3366EF0CAF8726D2D094210227670" },
+  { name = "typst", version = "0.3.4", build_tools = ["mix"], requirements = ["rustler", "rustler_precompiled"], otp_app = "typst", source = "hex", outer_checksum = "1CADF8D70DBBF242161EF5DD1446CDE3A133570F60EC2504216E3F8DF02993F2" },
+  { name = "webls", version = "1.6.2", build_tools = ["gleam"], requirements = ["gleam_stdlib", "gleam_time", "gtempo"], otp_app = "webls", source = "hex", outer_checksum = "515CA019E3B09FF7605D44ABBCDCF8FF56EC528AA29017741E0184278E3423DD" },
 ]
 
 [requirements]
@@ -34,8 +34,7 @@ gleam_stdlib = { version = ">= 0.68.1 and < 1.0.0" }
 gleam_time = { version = ">= 1.6.0 and < 2.0.0" }
 gleeunit = { version = ">= 1.0.0 and < 2.0.0" }
 glimra = { git = "git@github.com:kevinschweikert/glimra.git", ref = "ks/update-deps" }
-jot = { version = ">= 10.0.0 and < 11.0.0" }
-lumis = { version = ">= 0.0.1 and < 1.0.0" }
+jot = { version = ">= 11.0.0 and < 12.0.0" }
 lustre = { version = ">= 5.4.0 and < 6.0.0" }
 simplifile = { version = ">= 2.3.1 and < 3.0.0" }
 tom = { version = ">= 2.0.0 and < 3.0.0" }
