@@ -56,6 +56,12 @@ pub fn root(page: page.Page) {
         attribute.rel("stylesheet"),
         attribute.href("/style.css"),
       ]),
+      html.link([
+        attribute.rel("alternate"),
+        attribute.attribute("type", "application/atom+xml"),
+        attribute.attribute("title", config.author() <> " — Atom Feed"),
+        attribute.href("/feed.xml"),
+      ]),
       opengraph.description(page.meta.description),
       opengraph.title(page.meta.title),
       opengraph.url(page.abs_path(page)),
