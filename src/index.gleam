@@ -19,7 +19,7 @@ pub const description = "Hi! I'm Kevin Schweikert, a software engineer with a me
 pub fn view(posts: List(page.Page)) -> List(element.Element(a)) {
   let posts_by_year =
     posts
-    |> list.group(fn(post) { page.published_date(post.status).year })
+    |> list.group(fn(post) { post.published.year })
     |> dict.to_list()
     |> list.sort(fn(a, b) { int.compare(b.0, a.0) })
   [
@@ -50,9 +50,7 @@ fn post_list(posts: List(page.Page)) -> element.Element(a) {
 }
 
 fn posts_by_date(post_a: page.Page, post_b: page.Page) -> order.Order {
-  let date_b = post_b.status |> page.published_date()
-  let date_a = post_a.status |> page.published_date()
-  calendar.naive_date_compare(date_b, date_a)
+  calendar.naive_date_compare(post_b.published, post_a.published)
 }
 
 fn post_item(post: page.Page) -> element.Element(a) {
@@ -71,7 +69,7 @@ fn post_item(post: page.Page) -> element.Element(a) {
         [
           attribute.attribute(
             "datetime",
-            post.status |> page.published_date() |> helper.date_to_string(),
+            post.published |> helper.date_to_string(),
           ),
         ],
         [
@@ -85,8 +83,7 @@ fn post_item(post: page.Page) -> element.Element(a) {
 }
 
 fn abbr_post_date(post: page.Page) -> String {
-  let calendar.Date(year: _, month:, day:) =
-    post.status |> page.published_date()
+  let calendar.Date(year: _, month:, day:) = post.published
   let month_abbr = case month {
     calendar.January -> "JAN"
     calendar.February -> "FEB"

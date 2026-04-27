@@ -21,9 +21,11 @@ import typst
 
 const out_dir = "./priv"
 
-const pages_path = "./src/pages"
+const pages_path = "./pages"
 
-const post_path = "./src/pages/posts"
+const post_path = "./posts"
+
+const drafts_path = "./drafts"
 
 const index_path = "./src/index.gleam"
 
@@ -33,7 +35,7 @@ pub fn main() {
   let start = timestamp.system_time()
 
   let blog_env = envoy.get("BLOG_ENV") |> result.unwrap("PROD")
-  let show_draft = case blog_env {
+  let show_drafts = case blog_env {
     "PROD" | "prod" -> False
     _ -> True
   }
@@ -49,24 +51,22 @@ pub fn main() {
 
   let assert Ok(_) = simplifile.copy_directory("./assets", out_dir)
 
+  let drafts = case show_drafts {
+    True -> page.from_folder(drafts_path, fn(slug) { page.Article(slug) })
+    False -> []
+  }
+
   let posts =
     post_path
     |> page.from_folder(fn(slug) { page.Article(slug) })
-    |> list.filter(fn(page) { page.is_published(page) || show_draft })
+    |> list.append(drafts)
 
-  let pages =
-    pages_path
-    |> page.from_folder(fn(slug) { page.Site(slug) })
-    |> list.filter(fn(page) { page.is_published(page) || show_draft })
+  let pages = page.from_folder(pages_path, fn(slug) { page.Site(slug) })
 
   let index =
     page.Page(
       route: page.Home,
-      status: page.Published(calendar.Date(
-        2026,
-        calendar.month_from_int(1) |> result.lazy_unwrap(fn() { panic }),
-        18,
-      )),
+      published: calendar.Date(2026, calendar.January, 18),
       src: page.Elements(
         index.view(posts),
         origin_path: option.Some(index_path),
@@ -91,7 +91,7 @@ pub fn main() {
   [index]
   |> list.append(pages)
   |> list.append(posts)
-  |> list.filter_map(page.to_sitemap_item)
+  |> list.map(page.to_sitemap_item)
   |> sitemap.build()
   |> component.to_xml_docstring()
   |> write_file(filepath.join(out_dir, "sitemap.xml"), _)
@@ -131,8 +131,7 @@ fn create_image(markup: String, page: page.Page) {
         |> typst.add_binding("description", page.meta.description)
         |> typst.add_binding(
           "date",
-          page.published_date(page.status)
-            |> helper.date_to_humanized_string(),
+          page.published |> helper.date_to_humanized_string(),
         )
         |> typst.add_binding("domain", config.domain())
         |> typst.render()

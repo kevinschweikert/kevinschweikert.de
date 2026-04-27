@@ -2,7 +2,6 @@
 title = "Build Home Assistant Devices with Elixir and Nerves"
 description = "Learn how to integrate Elixir applications and Nerves devices into Home Assistant using MQTT"
 published = 2026-01-18
-draft = false
 ---
 
 I love [Home Assistant](https://www.home-assistant.io/). I love that I can throw in all these devices from different manufacturers, display their data in a unified dashboard and write automations that combine devices never intended to know of each other. Like switching on Philips Hue lights when the IKEA door sensor opens, or turning on the switch of a power outlet to activate a dehumidifier when an Aqara humidity sensor reports high values.

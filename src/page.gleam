@@ -26,11 +26,6 @@ pub type Image {
   File(url: route.Rel)
 }
 
-pub type Status {
-  Published(date: calendar.Date)
-  Draft(expected: calendar.Date)
-}
-
 pub type Route {
   Home
   Site(slug: String)
@@ -50,7 +45,7 @@ pub type Meta {
 }
 
 pub type Page {
-  Page(status: Status, route: Route, meta: Meta, src: Source)
+  Page(published: calendar.Date, route: Route, meta: Meta, src: Source)
 }
 
 pub type SitemapItem {
@@ -89,7 +84,7 @@ pub fn from_folder(path: String, to_route: fn(String) -> Route) -> List(Page) {
   let frontmatter.Extracted(frontmatter:, content:) =
     frontmatter.extract(content)
 
-  let #(status, meta) = extract_meta(frontmatter)
+  let #(published, meta) = extract_meta(frontmatter)
   let src = case filepath.extension(filename) {
     Ok("dj") | Ok("djot") -> Djot(content:, path: filepath.join(path, filename))
     Ok(_) -> panic as "filetype not supported"
@@ -99,25 +94,19 @@ pub fn from_folder(path: String, to_route: fn(String) -> Route) -> List(Page) {
   let slug = filename |> filepath.base_name |> filepath.strip_extension()
   let route = to_route(slug)
 
-  Page(status:, meta:, src:, route:)
+  Page(published:, meta:, src:, route:)
 }
 
-fn extract_meta(frontmatter: option.Option(String)) -> #(Status, Meta) {
+fn extract_meta(frontmatter: option.Option(String)) -> #(calendar.Date, Meta) {
   let assert Ok(metadata) = tom.parse(frontmatter |> option.unwrap(""))
 
-  let assert Ok(draft) = tom.get_bool(metadata, ["draft"])
   let assert Ok(title) = tom.get_string(metadata, ["title"])
   let assert Ok(description) = tom.get_string(metadata, ["description"])
-  let assert Ok(date) = tom.get_date(metadata, ["published"])
+  let assert Ok(published) = tom.get_date(metadata, ["published"])
   let author =
     tom.get_string(metadata, ["author"]) |> result.unwrap(config.author())
 
-  let status = case draft {
-    True -> Draft(expected: date)
-    False -> Published(date:)
-  }
-
-  #(status, Meta(title:, description:, author:, image: Generated))
+  #(published, Meta(title:, description:, author:, image: Generated))
 }
 
 pub fn git_hash(src: Source) -> option.Option(String) {
@@ -142,27 +131,12 @@ pub fn last_changed_at(src: Source) -> option.Option(calendar.Date) {
   }
 }
 
-pub fn is_published(page: Page) -> Bool {
-  case page.status {
-    Published(date: _) -> True
-    Draft(expected: _) -> False
-  }
-}
-
-pub fn published_date(status: Status) -> calendar.Date {
-  case status {
-    Published(date:) -> date
-    Draft(expected:) -> expected
-  }
-}
-
 pub fn updated_date(page: Page) -> option.Option(calendar.Date) {
-  let published_date = published_date(page.status)
   let last_changed_at = last_changed_at(page.src)
 
   case last_changed_at {
     option.Some(changed) -> {
-      case calendar.naive_date_compare(changed, published_date) {
+      case calendar.naive_date_compare(changed, page.published) {
         order.Gt -> last_changed_at
         _ -> option.None
       }
@@ -205,33 +179,29 @@ pub fn og_image_url(page: Page) -> option.Option(route.Rel) {
   }
 }
 
-pub fn to_sitemap_item(page: Page) -> Result(SitemapItem, Nil) {
-  case page.status {
-    Published(date:) ->
-      Ok(SitemapItem(
-        url: abs_path(page),
-        lastmod: updated_date(page) |> option.unwrap(date),
-      ))
-    Draft(_) -> Error(Nil)
-  }
+pub fn to_sitemap_item(page: Page) -> SitemapItem {
+  SitemapItem(
+    url: abs_path(page),
+    lastmod: updated_date(page) |> option.unwrap(page.published),
+  )
 }
 
 pub fn to_feed_item(page: Page) -> Result(FeedItem, Nil) {
-  case page.status, page.route {
-    Published(date:), Article(slug:) ->
+  case page.route {
+    Article(slug:) ->
       Ok(FeedItem(
         id: slug,
         title: page.meta.title,
         description: page.meta.description,
         url: abs_path(page),
-        published: date,
-        updated: updated_date(page) |> option.unwrap(date),
+        published: page.published,
+        updated: updated_date(page) |> option.unwrap(page.published),
         html: page
           |> to_minimal_elements()
           |> element.fragment()
           |> element.to_string(),
       ))
-    _, _ -> Error(Nil)
+    _ -> Error(Nil)
   }
 }
 
@@ -240,7 +210,7 @@ fn common(page: Page) {
     html.h1([], [html.text(page.meta.title)]),
     html.div([attribute.class("text-sm")], [
       html.text("Published on "),
-      component.time(published_date(page.status)),
+      component.time(page.published),
       {
         case updated_date(page) {
           option.Some(updated) ->
