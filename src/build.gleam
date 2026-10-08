@@ -2,7 +2,6 @@ import component
 import config
 import envoy
 import feed
-import filepath
 import gleam/list
 import gleam/option
 import gleam/result
@@ -13,25 +12,26 @@ import helper
 import index
 import layout
 import lustre/element
+import output.{Bytes, Output, Text}
 import page
 import route
 import simplifile
 import sitemap
 import typst
 
-const out_dir = "./priv"
+const out_dir: String = "./priv"
 
-const pages_path = "./pages"
+const pages_path: String = "./pages"
 
-const post_path = "./posts"
+const post_path: String = "./posts"
 
-const drafts_path = "./drafts"
+const drafts_path: String = "./drafts"
 
-const index_path = "./src/index.gleam"
+const index_path: String = "./src/index.gleam"
 
-const typst_template_path = "./src/template.typ"
+const typst_template_path: String = "./src/template.typ"
 
-pub fn main() {
+pub fn main() -> #(Int, duration.Unit) {
   let start = timestamp.system_time()
 
   let blog_env = envoy.get("BLOG_ENV") |> result.unwrap("PROD")
@@ -94,13 +94,17 @@ pub fn main() {
   |> list.map(page.to_sitemap_item)
   |> sitemap.build()
   |> component.to_xml_docstring()
-  |> write_file(filepath.join(out_dir, "sitemap.xml"), _)
+  |> Text()
+  |> Output(path: route.rel_file("/sitemap.xml"), contents: _)
+  |> output.write(out_dir, _)
 
   posts
   |> list.filter_map(page.to_feed_item)
   |> feed.build()
   |> component.to_xml_docstring()
-  |> write_file(filepath.join(out_dir, "feed.xml"), _)
+  |> Text()
+  |> Output(path: route.rel_file("/feed.xml"), contents: _)
+  |> output.write(out_dir, _)
 
   let assert Ok(markup) = simplifile.read(typst_template_path)
 
@@ -115,14 +119,11 @@ pub fn main() {
 }
 
 fn create_page(path: route.Rel, element: element.Element(a)) -> Nil {
-  let path = route.fs_rel_path(path)
-
-  out_dir
-  |> filepath.join(path)
-  |> write_file(element.to_document_string(element))
+  Output(path:, contents: Text(element.to_document_string(element)))
+  |> output.write(out_dir, _)
 }
 
-fn create_image(markup: String, page: page.Page) {
+fn create_image(markup: String, page: page.Page) -> Nil {
   case page.og_image_url(page) {
     option.Some(rel) -> {
       let assert Ok(png) =
@@ -136,18 +137,9 @@ fn create_image(markup: String, page: page.Page) {
         |> typst.add_binding("domain", config.domain())
         |> typst.render()
 
-      rel
-      |> route.fs_rel_path()
-      |> filepath.join(out_dir, _)
-      |> simplifile.write_bits(png)
+      Output(path: rel, contents: Bytes(png))
+      |> output.write(out_dir, _)
     }
-    option.None -> Ok(Nil)
+    option.None -> Nil
   }
-}
-
-fn write_file(to path: String, write contents: String) -> Nil {
-  let assert Ok(Nil) =
-    simplifile.create_directory_all(filepath.directory_name(path))
-  let assert Ok(Nil) = simplifile.write(contents, to: path)
-  Nil
 }
