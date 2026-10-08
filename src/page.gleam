@@ -65,7 +65,11 @@ pub type FeedItem {
 }
 
 pub fn from_folder(path: String, to_route: fn(String) -> Route) -> List(Page) {
-  let assert Ok(files) = simplifile.read_directory(path)
+  let files = case simplifile.read_directory(path) {
+    Ok(files) -> files
+    Error(simplifile.Enoent) -> []
+    Error(_) -> panic
+  }
   let files =
     list.filter(files, fn(filename) {
       filename
