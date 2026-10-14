@@ -52,20 +52,20 @@ pub fn main() -> #(Int, duration.Unit) {
   let assert Ok(_) = simplifile.copy_directory("./assets", out_dir)
 
   let drafts = case show_drafts {
-    True -> page.from_folder(drafts_path, fn(slug) { page.Article(slug) })
+    True -> page.from_folder(drafts_path, fn(slug) { route.Article(slug) })
     False -> []
   }
 
   let posts =
     post_path
-    |> page.from_folder(fn(slug) { page.Article(slug) })
+    |> page.from_folder(fn(slug) { route.Article(slug) })
     |> list.append(drafts)
 
-  let pages = page.from_folder(pages_path, fn(slug) { page.Site(slug) })
+  let pages = page.from_folder(pages_path, fn(slug) { route.Standalone(slug) })
 
   let index =
     page.Page(
-      route: page.Home,
+      route: route.Home,
       published: calendar.Date(2026, calendar.January, 18),
       src: page.Elements(
         index.view(posts),
@@ -95,7 +95,7 @@ pub fn main() -> #(Int, duration.Unit) {
   |> sitemap.build()
   |> component.to_xml_docstring()
   |> Text()
-  |> Output(path: route.rel_file("/sitemap.xml"), contents: _)
+  |> Output(path: route.target(route.Sitemap), contents: _)
   |> output.write(out_dir, _)
 
   posts
@@ -103,7 +103,7 @@ pub fn main() -> #(Int, duration.Unit) {
   |> feed.build()
   |> component.to_xml_docstring()
   |> Text()
-  |> Output(path: route.rel_file("/feed.xml"), contents: _)
+  |> Output(path: route.target(route.Feed), contents: _)
   |> output.write(out_dir, _)
 
   let assert Ok(markup) = simplifile.read(typst_template_path)
@@ -124,22 +124,17 @@ fn create_page(path: route.Rel, element: element.Element(a)) -> Nil {
 }
 
 fn create_image(markup: String, page: page.Page) -> Nil {
-  case page.og_image_url(page) {
-    option.Some(rel) -> {
-      let assert Ok(png) =
-        typst.new(markup)
-        |> typst.add_binding("title", page.meta.title)
-        |> typst.add_binding("description", page.meta.description)
-        |> typst.add_binding(
-          "date",
-          page.published |> helper.date_to_humanized_string(),
-        )
-        |> typst.add_binding("domain", config.domain())
-        |> typst.render()
+  let assert Ok(png) =
+    typst.new(markup)
+    |> typst.add_binding("title", page.meta.title)
+    |> typst.add_binding("description", page.meta.description)
+    |> typst.add_binding(
+      "date",
+      page.published |> helper.date_to_humanized_string(),
+    )
+    |> typst.add_binding("domain", config.domain())
+    |> typst.render()
 
-      Output(path: rel, contents: Bytes(png))
-      |> output.write(out_dir, _)
-    }
-    option.None -> Nil
-  }
+  Output(path: route.og_image(page.route), contents: Bytes(png))
+  |> output.write(out_dir, _)
 }

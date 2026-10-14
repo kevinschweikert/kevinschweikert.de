@@ -16,7 +16,7 @@ import glimra/theme
 import lustre/attribute
 import lustre/element
 import lustre/element/html
-import route
+import route.{type Route}
 import simplifile
 import tom
 
@@ -24,12 +24,6 @@ pub type Image {
   None
   Generated
   File(url: route.Rel)
-}
-
-pub type Route {
-  Home
-  Site(slug: String)
-  Article(slug: String)
 }
 
 pub type Source {
@@ -149,38 +143,14 @@ pub fn updated_date(page: Page) -> option.Option(calendar.Date) {
   }
 }
 
-pub fn stem(route: Route) -> String {
-  case route {
-    Home -> "index"
-    Site(slug:) -> slug
-    Article(slug:) -> "post-" <> slug
-  }
-}
-
 pub fn rel_path(page: Page) -> route.Rel {
-  case page.route {
-    Home -> "/"
-    Site(slug:) -> "/" <> slug
-    Article(slug:) -> "/posts/" <> slug
-  }
-  |> route.rel_page
+  route.of(page.route)
 }
 
 pub fn abs_path(page: Page) -> route.Abs {
   page
   |> rel_path()
   |> route.abs()
-}
-
-pub fn og_image_url(page: Page) -> option.Option(route.Rel) {
-  case page.meta.image {
-    None -> option.None
-    Generated ->
-      { "/images/og-" <> stem(page.route) <> ".png" }
-      |> route.rel_file
-      |> option.Some()
-    File(url:) -> url |> option.Some()
-  }
 }
 
 pub fn to_sitemap_item(page: Page) -> SitemapItem {
@@ -192,7 +162,7 @@ pub fn to_sitemap_item(page: Page) -> SitemapItem {
 
 pub fn to_feed_item(page: Page) -> Result(FeedItem, Nil) {
   case page.route {
-    Article(slug:) ->
+    route.Article(slug:) ->
       Ok(FeedItem(
         id: slug,
         title: page.meta.title,

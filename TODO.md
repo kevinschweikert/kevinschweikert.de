@@ -182,7 +182,7 @@ changed how the build talks about its output, not what it writes.
 
 ### The problem
 
-`route.rel_page` takes a string and performs three `let assert`s on it:
+`route.rel_page` takes a string and performs four `let assert`s on it:
 
 ```gleam
 pub fn rel_page(path: String) -> Rel {
@@ -205,6 +205,14 @@ and `/uses/` as bare strings, and `:159` writes `/impress.html`, which only
 resolves because `caddy/blog.part:23` redirects it. The typed route exists to
 make URLs unforgeable, and the file that renders the most URLs forges all of them
 by hand.
+
+The feed has the same disease in a worse form. `/feed.xml` is written out by hand
+three times: `src/build.gleam:106` for the file the build writes,
+`src/feed.gleam:20` for the atom self-link inside that file, and
+`src/layout.gleam:63` for the `<link rel="alternate">` that every page carries.
+Three spellings of one URL, agreeing by luck. `/sitemap.xml` gets off lighter
+with two, `src/build.gleam:98` and `assets/robots.txt:7`, and the second is a
+static file the generator only copies, so it stays hand-written.
 
 Hiding in the same file is a worse one. `src/layout.gleam:20` builds the
 canonical tag with `html.meta`:
@@ -256,19 +264,67 @@ end. This also clears up a naming collision that has been quietly confusing:
 right now there is a module called `route` and a different type called
 `page.Route`.
 
+That raises the question of what belongs in `Route`, and the feed is where it
+gets interesting. The feed feels like a page. It has a URL, you link to it from
+the header, it is a thing the site serves. What it is not is a directory with an
+`index.html` inside it.
+
+That distinction is already named, and it is not the one the current API
+suggests. `Kind` is not page-versus-asset. It is directory-versus-file: `Page`
+gets a trailing slash and `slug/index.html`, `File` gets neither. So the feed is
+`Kind.File` and a perfectly good `Route` at the same time. Those are independent
+questions, and running them together is what makes `route.asset("/feed.xml")`
+read wrong. It is not wrong about the kind. It is wrong about the word.
+
+The temptation now is to drop `Feed` and `Sitemap` into `Route` beside the pages
+and move on. Resist it, for a reason that only surfaces one type later. Chapter 5
+gives every page a `route` field, so if `Route` can be `Feed`, then a page whose
+route is the feed type-checks, and so does asking that feed for the social card
+it does not have. You would spend this chapter deleting assertions that cannot
+fire and hand back an `Option` that is always `Some` on the way out.
+
+So split the question in two. A `Route` is a page, and that is all it ever is. A
+`Target` is anything the build emits a URL for, and a page is one of the things
+it can be. The social card is another, and that is what makes the split pay: an
+OG image is a file derived from a page, so `Target` carries the `Route` it
+belongs to, and the derivation stops being an outlier bolted to the side.
+
+Variants rather than functions, and the reason is worth stating. A `route.feed()`
+returning a `Rel` would spell the URL once, which is most of the win, but it
+hands back a value nothing can enumerate. A variant is a member of a set you can
+list, and listing that set is what chapter 8's `Targets` and chapter 9's
+validator are for. The header links to `/feed.xml` from every page on the site,
+so chapter 9 has to know that URL is real. `Target` tells it, and tells it about
+the OG images too, which a function on `Route` would have left outside the set.
+
 ### The work
 
 ```gleam
 // src/route.gleam
 
+/// A page the site serves as a directory with an index.html in it.
 pub type Route {
   Home
   Standalone(slug: String)
   Article(slug: String)
 }
 
-/// Total. A Route cannot name a path that is not a valid relative URL.
+/// Every file the build emits a URL for.
+pub type Target {
+  Document(Route)
+  OgImage(Route)
+  Feed
+  Sitemap
+}
+
+/// Total.
+pub fn target(target: Target) -> Rel
+
+/// Total. Linking only ever points at pages, so this is what the views use.
 pub fn of(route: Route) -> Rel
+
+/// Total. Every page has a social card.
+pub fn og_image(route: Route) -> Rel
 
 /// Total. Asset paths come from walking assets/, so they are known good.
 pub fn asset(path: String) -> Rel
@@ -277,16 +333,41 @@ pub fn asset(path: String) -> Rel
 `Site(slug)` becomes `Standalone(slug)`, because in chapter 5 `Site` starts
 meaning the whole site.
 
+`of` and `og_image` are one-liners over `target`, `Document(route)` and
+`OgImage(route)` respectively. They earn their place because there are two
+audiences here and they want different things. Views link, and a link only ever
+points at a page. Generators emit, and they need the whole set. Keeping both
+doors open means the nav never writes `Document` and chapter 8 never writes a
+special case.
+
+`Document` and not `Page` as the variant name, because chapter 5 introduces
+`site.Page` and the book already flags one collision of this shape, a module
+called `route` next to a type called `page.Route`. No sense recreating it
+mirrored.
+
 Note what happens to `Kind`. Today `rel_page` and `rel_file` ask the caller to
-pick `Page` or `File`. But a `Route` is always a page and an asset is always a
-file, so these two constructors set `Kind` correctly by construction and the
-caller cannot get it wrong.
+pick. Now `target` picks, and it is the only thing that does: `Page` for
+`Document`, `File` for `OgImage`, `Feed` and `Sitemap`. An asset is always a
+file. Nothing outside the module can get it wrong, and `rel_page` and `rel_file`
+become private.
+
+`page.stem` at `src/page.gleam:152` dissolves rather than moving. It exists only
+to build the OG image path at `:179`, and that path is a function of the route,
+so `OgImage` derives it and `stem` stops being a concept worth having. Note what
+`og_image` does not return. There is no `Option`, because a `Route` is a page and
+every page has a card. The `Option` in today's `page.og_image_url` survives only
+to serve `page.Image`, which chapter 5 deletes as dead, and both call sites,
+`src/layout.gleam:82` and `src/build.gleam:127`, already know they are holding a
+page.
 
 Delete `fs_abs_path` and `abs_from_base`. Neither has a caller.
 
 Then fix the layout. Nav entries come from `route.of(Standalone("about"))` and
 friends, so the layout cannot name a page that does not exist, and the footer's
-`/impress.html` becomes `/impress/` as a consequence rather than as a patch.
+`/impress.html` becomes `/impress/` as a consequence rather than as a patch. The
+feed link at `:63` becomes `route.target(Feed)`, and so do `src/feed.gleam:20`
+and `src/build.gleam:106`. `src/build.gleam:98` becomes `route.target(Sitemap)`.
+Four hand-written paths, one spelling each, all of it in `route.gleam`.
 
 Change `html.meta` to `html.link` on line 20 while you are in the file. One word,
 and it is the difference between having canonical tags and not.
@@ -308,9 +389,18 @@ rg -o '<link[^>]*canonical[^>]*>' priv/index.html priv/*/index.html
 One hit per page, each a `<link>`, each with a trailing slash. No `<meta>` tag
 anywhere should carry a `rel` attribute.
 
+```sh
+rg -n 'feed\.xml|sitemap\.xml' src/
+```
+
+Two hits, both in `route.gleam`, both inside `target`. Anything else is a path
+that can still drift.
+
 The diff shows the canonical tags changing element, `/impress.html` becoming
 `/impress/`, and the two content links picking up their slashes. Nothing else.
-The site now stops depending on Caddy redirects for its own links.
+In particular the feed and sitemap work changes no output whatsoever, which is
+the point of it: three spellings that agreed by luck now agree by construction.
+The site also stops depending on Caddy redirects for its own links.
 
 ### What the server already does
 
@@ -542,10 +632,16 @@ pub type Page {
 
 `source` is `Option` because a computed page may have no file behind it.
 
-Two types go away here. `page.Image` has three variants and only one is ever
+`route` is a `route.Route` and not a `route.Target`, which is the whole point of
+the split chapter 2 made. A `Page` cannot be the feed. Nothing in this type needs
+to defend against it and no function that takes a `Page` has to wonder.
+
+Three types go away here. `page.Image` has three variants and only one is ever
 constructed: `extract_meta` at `src/page.gleam:109` hardcodes `Generated`, so
-`None` and `File(url:)` are dead. The OG image path is a function of the route,
-so make it a function.
+`None` and `File(url:)` are dead. Chapter 2 already made the OG image path a
+total function of the route, so deleting `Image` takes `page.og_image_url` with
+it and its two callers go straight to `route.og_image`, which hands back a `Rel`
+rather than an `Option` they would only have to unwrap.
 
 `page.SitemapItem` and `page.FeedItem` also go. They are projections, and
 projections do not need types. `FeedItem` is the worse of the two: it carries a
@@ -750,9 +846,23 @@ you were after, and notice it did not require a plugin system or a registry of
 hooks. It required one type.
 
 `targets` is computable before any rendering happens, which is the detail that
-makes chapter 9 work. Page routes come from `Site.pages`, asset paths from
-walking `assets/`, OG image paths from the routes. So you can validate every link
-before you render a single element.
+makes chapter 9 work. Chapter 2 did most of this for you: `route.Target`
+enumerates everything the build emits a URL for, so `targets` is
+
+```gleam
+[route.Feed, route.Sitemap]
+|> list.append({
+  use page <- list.flat_map(site.pages)
+  [route.Document(page.route), route.OgImage(page.route)]
+})
+|> list.map(route.target)
+|> list.append(list.map(assets, route.asset))
+```
+
+and the only thing it needs beyond the type is the walk over `assets/`. Note that
+OG images are in the set rather than beside it, which is what lets chapter 9
+check a link to one. So you can validate every link before you render a single
+element.
 
 ### The work
 
@@ -879,9 +989,11 @@ depends on being right.
 Delete what is left of the old structure: `page.gleam`, `index.gleam`,
 `build.gleam`, and `render.gleam` if chapter 6 did not already take it.
 
-Write `test/route_test.gleam`. Cover `canonicalize` for both kinds, `of` and
+Write `test/route_test.gleam`. Cover `canonicalize` for both kinds, `target` and
 `asset` round-tripping through `rel_string`, and `fs_rel_path` for nested slugs
-like `posts/some-post`.
+like `posts/some-post`. `target` is the one to be thorough with, since it is now
+the only thing that picks a kind: `Document` comes back with a trailing slash,
+and `OgImage`, `Feed` and `Sitemap` must not.
 
 Then check the dead API surface that accumulated: `git.short_hash`,
 `typst.set_options`, and five unused helpers in `opengraph.gleam`
@@ -913,7 +1025,7 @@ Walk the final diff one last time. Every difference should be a fix you can name
 | `component.gleam` | `view/components.gleam`, XML bits move to the generators |
 | `sitemap.gleam`, `feed.gleam` | `generate/`, as `fn(Site, Targets) -> List(Output)` |
 | `atom.gleam`, `opengraph.gleam` | `vendor/`, unchanged |
-| `route.gleam` | stays, plus `Route` and total constructors |
+| `route.gleam` | stays, plus `Route`, `Target` and total constructors |
 
 ## One thing deliberately left out
 

@@ -9,6 +9,19 @@ type Kind {
   Page
 }
 
+pub type Route {
+  Home
+  Standalone(slug: String)
+  Article(slug: String)
+}
+
+pub type Target {
+  Document(Route)
+  OgImage(Route)
+  Feed
+  Sitemap
+}
+
 pub opaque type Abs {
   Abs(uri.Uri, Kind)
 }
@@ -23,16 +36,46 @@ pub fn abs(rel: Rel) -> Abs {
   Abs(u, kind)
 }
 
-pub fn abs_from_base(base: Abs, path: Rel) {
-  let Abs(a, _) = base
-  let Rel(b, kind) = path
-  let assert Ok(u) = uri.merge(a, b)
-  Abs(u, kind)
+pub fn of(route: Route) -> Rel {
+  Document(route) |> target()
 }
 
-/// Creates a new relative string to root-site relative. Has to start with /
-/// 
-pub fn rel_page(path: String) -> Rel {
+pub fn og_image(route: Route) -> Rel {
+  OgImage(route) |> target()
+}
+
+pub fn target(target: Target) -> Rel {
+  case target {
+    Document(route) -> document_path(route)
+    OgImage(route) -> og_image_path(route)
+    Feed -> rel_file("/feed.xml")
+    Sitemap -> rel_file("/sitemap.xml")
+  }
+}
+
+pub fn asset(path: String) -> Rel {
+  rel_file(path)
+}
+
+fn document_path(route: Route) -> Rel {
+  case route {
+    Home -> rel_page("/")
+    Standalone(slug:) -> rel_page("/" <> slug)
+    Article(slug:) -> rel_page("/posts/" <> slug)
+  }
+}
+
+fn og_image_path(route: Route) -> Rel {
+  let Rel(uri, _) = document_path(route)
+  let stem = case uri.path {
+    "/" -> "/index"
+    path -> path
+  }
+
+  rel_file("/images/og" <> stem <> ".png")
+}
+
+fn rel_page(path: String) -> Rel {
   let assert True = string.starts_with(path, "/")
   let assert Ok(uri) = uri.parse(path)
   let assert option.None = uri.scheme
@@ -40,7 +83,7 @@ pub fn rel_page(path: String) -> Rel {
   Rel(uri, Page)
 }
 
-pub fn rel_file(path: String) -> Rel {
+fn rel_file(path: String) -> Rel {
   let assert True = string.starts_with(path, "/")
   let assert Ok(uri) = uri.parse(path)
   let assert option.None = uri.scheme
@@ -79,14 +122,6 @@ pub fn fs_rel_path(rel: Rel) -> String {
   |> maybe_add_extension(kind)
 }
 
-pub fn fs_abs_path(abs: Abs) -> String {
-  let Abs(uri, kind) = abs
-
-  uri.path
-  |> strip_leading_slash()
-  |> maybe_add_extension(kind)
-}
-
 fn strip_leading_slash(string: String) -> String {
   case string {
     "/" <> rest -> rest
@@ -94,7 +129,7 @@ fn strip_leading_slash(string: String) -> String {
   }
 }
 
-fn maybe_add_extension(string: String, kind: Kind) {
+fn maybe_add_extension(string: String, kind: Kind) -> String {
   case kind {
     Page -> filepath.join(string, "/index.html")
     File -> string

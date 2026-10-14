@@ -17,8 +17,8 @@ pub fn build(items: List(page.FeedItem)) -> element.Element(a) {
     atom.updated([], now()),
     atom.link([
       attribute.rel("self"),
-      "/feed.xml"
-        |> route.rel_file
+      route.Feed
+        |> route.target
         |> route.abs()
         |> component.absolute_href(),
     ]),

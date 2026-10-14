@@ -1,15 +1,15 @@
 import config
-import gleam/option
 import lustre/attribute
-import lustre/element
 import lustre/element/html
 import opengraph
 import page
 import route
 
-const plausible_source = "https://plausible.kevinschweikert.de/js/pa-Xjy2lqLyTD7zfUCRDjM3k.js"
+const plausible_source =
+  "https://plausible.kevinschweikert.de/js/pa-Xjy2lqLyTD7zfUCRDjM3k.js"
 
-const plausible_script = "window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+const plausible_script =
+  "window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
   plausible.init()"
 
 pub fn root(page: page.Page) {
@@ -17,7 +17,7 @@ pub fn root(page: page.Page) {
     html.head([], [
       html.title([], page.meta.title),
       html.meta([attribute.attribute("charset", "utf-8")]),
-      html.meta([
+      html.link([
         attribute.rel("canonical"),
         attribute.href(
           page |> page.rel_path() |> route.abs() |> route.abs_string(),
@@ -60,29 +60,25 @@ pub fn root(page: page.Page) {
         attribute.rel("alternate"),
         attribute.attribute("type", "application/atom+xml"),
         attribute.attribute("title", config.author() <> " — Atom Feed"),
-        attribute.href("/feed.xml"),
+        route.Feed |> route.target |> route.rel_string |> attribute.href(),
       ]),
       opengraph.description(page.meta.description),
       opengraph.title(page.meta.title),
       opengraph.url(page.abs_path(page)),
 
-      {
-        case page.route {
-          page.Article(_) ->
-            html.meta([
-              attribute.attribute("property", "og:type"),
-              attribute.content("article"),
-            ])
-          _ -> opengraph.website()
-        }
+      case page.route {
+        route.Article(_) ->
+          html.meta([
+            attribute.attribute("property", "og:type"),
+            attribute.content("article"),
+          ])
+        _ -> opengraph.website()
       },
-      {
-        case page.og_image_url(page) {
-          option.Some(rel) ->
-            opengraph.image(rel |> route.abs() |> route.abs_string())
-          option.None -> element.fragment([])
-        }
-      },
+      page.route
+        |> route.og_image
+        |> route.abs()
+        |> route.abs_string()
+        |> opengraph.image,
     ]),
     html.body(
       [
@@ -99,11 +95,51 @@ pub fn root(page: page.Page) {
               ),
             ],
             [
-              html.a([attribute.href("/")], [html.text("Home")]),
-              html.a([attribute.href("/about/")], [html.text("About")]),
-              html.a([attribute.href("/contact/")], [html.text("Contact")]),
-              html.a([attribute.href("/now/")], [html.text("Now")]),
-              html.a([attribute.href("/uses/")], [html.text("Uses")]),
+              html.a(
+                [
+                  route.Home
+                  |> route.of()
+                  |> route.rel_string()
+                  |> attribute.href,
+                ],
+                [html.text("Home")],
+              ),
+              html.a(
+                [
+                  route.Standalone("about")
+                  |> route.of()
+                  |> route.rel_string()
+                  |> attribute.href,
+                ],
+                [html.text("About")],
+              ),
+              html.a(
+                [
+                  route.Standalone("contact")
+                  |> route.of()
+                  |> route.rel_string()
+                  |> attribute.href,
+                ],
+                [html.text("Contact")],
+              ),
+              html.a(
+                [
+                  route.Standalone("now")
+                  |> route.of()
+                  |> route.rel_string()
+                  |> attribute.href,
+                ],
+                [html.text("Now")],
+              ),
+              html.a(
+                [
+                  route.Standalone("uses")
+                  |> route.of()
+                  |> route.rel_string()
+                  |> attribute.href,
+                ],
+                [html.text("Uses")],
+              ),
             ],
           ),
         ]),
@@ -156,9 +192,17 @@ pub fn root(page: page.Page) {
               ),
             ]),
             html.p([], [
-              html.a([attribute.href("/impress.html")], [
-                html.text("Impress / Impressum"),
-              ]),
+              html.a(
+                [
+                  route.Standalone("impress")
+                  |> route.of()
+                  |> route.rel_string()
+                  |> attribute.href,
+                ],
+                [
+                  html.text("Impress / Impressum"),
+                ],
+              ),
             ]),
           ],
         ),
