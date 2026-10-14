@@ -8,6 +8,7 @@ import gleam/result
 import gleam/time/calendar
 import gleam/time/duration
 import gleam/time/timestamp
+import gleam/uri
 import helper
 import index
 import layout
@@ -38,6 +39,14 @@ pub fn main() -> #(Int, duration.Unit) {
   let show_drafts = case blog_env {
     "PROD" | "prod" -> False
     _ -> True
+  }
+
+  let config = case envoy.get("SITE_URL") {
+    Ok(url) -> {
+      let assert Ok(base) = uri.parse(url)
+      config.Config(..config.default(), base:)
+    }
+    Error(_) -> config.default()
   }
 
   case simplifile.is_directory(out_dir) {
@@ -72,26 +81,25 @@ pub fn main() -> #(Int, duration.Unit) {
         origin_path: option.Some(index_path),
       ),
       meta: page.Meta(
-        title: index.title,
-        description: index.description,
+        title: config.title,
+        description: config.description,
         image: page.Generated,
-        author: config.author(),
       ),
     )
 
-  create_page(page.rel_path(index), layout.root(index))
+  create_page(page.rel_path(index), layout.root(index, config))
 
   list.each(pages, fn(page) {
-    create_page(page.rel_path(page), layout.root(page))
+    create_page(page.rel_path(page), layout.root(page, config))
   })
   list.each(posts, fn(page) {
-    create_page(page.rel_path(page), layout.root(page))
+    create_page(page.rel_path(page), layout.root(page, config))
   })
 
   [index]
   |> list.append(pages)
   |> list.append(posts)
-  |> list.map(page.to_sitemap_item)
+  |> list.map(page.to_sitemap_item(_, config))
   |> sitemap.build()
   |> component.to_xml_docstring()
   |> Text()
@@ -99,8 +107,8 @@ pub fn main() -> #(Int, duration.Unit) {
   |> output.write(out_dir, _)
 
   posts
-  |> list.filter_map(page.to_feed_item)
-  |> feed.build()
+  |> list.filter_map(page.to_feed_item(_, config))
+  |> feed.build(config)
   |> component.to_xml_docstring()
   |> Text()
   |> Output(path: route.target(route.Feed), contents: _)
@@ -111,7 +119,7 @@ pub fn main() -> #(Int, duration.Unit) {
   [index]
   |> list.append(pages)
   |> list.append(posts)
-  |> list.each(create_image(markup, _))
+  |> list.each(create_image(markup, _, config))
 
   let end = timestamp.system_time()
 
@@ -123,7 +131,7 @@ fn create_page(path: route.Rel, element: element.Element(a)) -> Nil {
   |> output.write(out_dir, _)
 }
 
-fn create_image(markup: String, page: page.Page) -> Nil {
+fn create_image(markup: String, page: page.Page, config: config.Config) -> Nil {
   let assert Ok(png) =
     typst.new(markup)
     |> typst.add_binding("title", page.meta.title)
@@ -132,7 +140,7 @@ fn create_image(markup: String, page: page.Page) -> Nil {
       "date",
       page.published |> helper.date_to_humanized_string(),
     )
-    |> typst.add_binding("domain", config.domain())
+    |> typst.add_binding("domain", config.domain(config))
     |> typst.render()
 
   Output(path: route.og_image(page.route), contents: Bytes(png))

@@ -360,6 +360,21 @@ to serve `page.Image`, which chapter 5 deletes as dead, and both call sites,
 `src/layout.gleam:82` and `src/build.gleam:127`, already know they are holding a
 page.
 
+Derive the image path from the document path rather than from a hand-rolled
+stem. `og-` plus a flattened slug is how it works today, and the flattening is
+not quite safe: `Standalone("post-foo")` and `Article("foo")` both land on
+`og-post-foo.png`. Nothing collides right now, but the `post-` prefix is a
+convention doing a type's job. The document path is already unique per route, so
+reuse it. `/about` becomes `/images/og/about.png`, `/posts/foo` becomes
+`/images/og/posts/foo.png`. Collisions stop being unlikely and start being
+impossible, and the generated cards move out of `images/`, where they currently
+sit interleaved with the files copied from `assets/images/`.
+
+This renames all eight cards, so the old `/images/og-*.png` URLs 404. The
+`og:image` tag platforms read is correct, so what breaks is previews cached
+elsewhere from before. The reason to do it in this chapter rather than later: the
+paths are one private function with no call sites to chase.
+
 Delete `fs_abs_path` and `abs_from_base`. Neither has a caller.
 
 Then fix the layout. Nav entries come from `route.of(Standalone("about"))` and
@@ -396,11 +411,17 @@ rg -n 'feed\.xml|sitemap\.xml' src/
 Two hits, both in `route.gleam`, both inside `target`. Anything else is a path
 that can still drift.
 
-The diff shows the canonical tags changing element, `/impress.html` becoming
-`/impress/`, and the two content links picking up their slashes. Nothing else.
-In particular the feed and sitemap work changes no output whatsoever, which is
-the point of it: three spellings that agreed by luck now agree by construction.
-The site also stops depending on Caddy redirects for its own links.
+The diff shows five things and no sixth. The canonical tags change element on all
+eight pages. `/impress.html` becomes `/impress/` in every footer.
+`/contact.html` and `/uses#Camera` pick up their slashes, the first of them
+twice, because the feed carries a pre-rendered copy of that post. The `og:image`
+URLs move to `/images/og/...` and the eight PNGs underneath them are renamed. And
+`feed.xml` carries its usual new timestamp.
+
+`sitemap.xml` is byte-identical, which is the feed and sitemap work reporting in:
+three spellings that agreed by luck now agree by construction, and agreeing by
+construction looks like nothing at all. The site also stops depending on Caddy
+redirects for its own links.
 
 ### What the server already does
 
@@ -441,7 +462,7 @@ it.
 
 ### The problem
 
-`src/config.gleam` is five functions returning constants. `root_url()` parses a
+`src/config.gleam` is four functions returning constants. `root_url()` parses a
 URI from a string every time it is called, and it is called once per route
 conversion.
 
@@ -474,16 +495,57 @@ pub type Config {
 pub fn default() -> Config
 ```
 
+`title` and `description` come from `src/index.gleam:15,17`, where they are
+currently the home page's constants. This is where they become the site's.
+`domain()` disappears into `base.host`.
+
 `route.abs` currently calls `config.root_url()` internally. It now takes the base
 as an argument instead. That is slightly more typing at each call site and much
 more honest: converting a relative route to an absolute one genuinely does depend
-on where the site lives.
+on where the site lives. Notice what it does to the import graph. `route.gleam`
+drops its `config` import and ends the chapter depending on nothing in this
+project at all, which is a fair description of what a routing module should be.
+
+Then make something produce a config that is not the default, because otherwise
+the capability this chapter opens by promising does not exist and `default` is a
+name for a thing with no alternative. The environment is the obvious source, and
+`src/build.gleam:37` already reads `BLOG_ENV` this way:
+
+```gleam
+let config = case envoy.get("SITE_URL") {
+  Ok(url) -> {
+    let assert Ok(base) = uri.parse(url)
+    config.Config(..config.default(), base:)
+  }
+  Error(_) -> config.default()
+}
+```
+
+Reading it here rather than inside `config.default()` keeps `config.gleam` free
+of I/O, which is the same boundary discipline chapter 4 is about to argue for at
+greater length.
+
+One small fix falls out while you are in `feed.gleam`. Lines 15 and 16 use
+`config.domain()` for both the atom title and the atom id, and those want
+different things: the title is `config.title`, the id is the base URL.
 
 ### Check it
 
-Clean diff. Then try it properly: build with a `Config` whose base is
-`http://localhost:8080` and confirm `sitemap.xml` and `feed.xml` come out with
-local URLs. That capability is the whole point of the chapter.
+```sh
+just build && diff -r /tmp/golden priv
+```
+
+Clean apart from the feed timestamp. Then try the capability:
+
+```sh
+SITE_URL=http://localhost:8080 just build
+rg -o 'https?://[^<]*' priv/sitemap.xml | head -3
+```
+
+Local URLs in `sitemap.xml` and `feed.xml`, and the canonical tags and `og:image`
+in every page pointing at `localhost` too. That is the whole point of the
+chapter, and it is now one environment variable rather than an edit and a
+rebuild.
 
 ---
 

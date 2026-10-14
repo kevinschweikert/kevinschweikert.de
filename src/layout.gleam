@@ -1,4 +1,4 @@
-import config
+import config.{type Config}
 import lustre/attribute
 import lustre/element/html
 import opengraph
@@ -12,7 +12,7 @@ const plausible_script =
   "window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
   plausible.init()"
 
-pub fn root(page: page.Page) {
+pub fn root(page: page.Page, config: Config) {
   html.html([attribute.lang("en")], [
     html.head([], [
       html.title([], page.meta.title),
@@ -20,7 +20,10 @@ pub fn root(page: page.Page) {
       html.link([
         attribute.rel("canonical"),
         attribute.href(
-          page |> page.rel_path() |> route.abs() |> route.abs_string(),
+          page
+          |> page.rel_path()
+          |> route.abs(on: config.base)
+          |> route.abs_string(),
         ),
       ]),
       html.meta([
@@ -41,7 +44,7 @@ pub fn root(page: page.Page) {
       html.script([], plausible_script),
       html.meta([
         attribute.attribute("name", "author"),
-        attribute.attribute("content", config.author()),
+        attribute.attribute("content", config.author),
       ]),
       html.meta([
         attribute.attribute("name", "viewport"),
@@ -59,12 +62,12 @@ pub fn root(page: page.Page) {
       html.link([
         attribute.rel("alternate"),
         attribute.attribute("type", "application/atom+xml"),
-        attribute.attribute("title", config.author() <> " — Atom Feed"),
+        attribute.attribute("title", config.author <> " — Atom Feed"),
         route.Feed |> route.target |> route.rel_string |> attribute.href(),
       ]),
       opengraph.description(page.meta.description),
       opengraph.title(page.meta.title),
-      opengraph.url(page.abs_path(page)),
+      opengraph.url(page.abs_path(page, config.base)),
 
       case page.route {
         route.Article(_) ->
@@ -76,7 +79,7 @@ pub fn root(page: page.Page) {
       },
       page.route
         |> route.og_image
-        |> route.abs()
+        |> route.abs(on: config.base)
         |> route.abs_string()
         |> opengraph.image,
     ]),
@@ -149,7 +152,7 @@ pub fn root(page: page.Page) {
               "flex-1 min-w-0 w-full max-w-3xl mx-auto prose dark:prose-invert prose-catppuccin prose-img:rounded-lg  prose-a:no-underline prose-a:hover:underline prose-pre:text-ctp-base dark:prose-pre:text-ctp-text",
             ),
           ],
-          page.to_elements(page),
+          page.to_elements(page, config),
         ),
         html.footer(
           [

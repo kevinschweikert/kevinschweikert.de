@@ -1,6 +1,6 @@
 import atom
 import component
-import config
+import config.{type Config}
 import gleam/list
 import gleam/time/calendar
 import gleam/time/timestamp
@@ -10,19 +10,19 @@ import lustre/element
 import page
 import route
 
-pub fn build(items: List(page.FeedItem)) -> element.Element(a) {
+pub fn build(items: List(page.FeedItem), config: Config) -> element.Element(a) {
   atom.feed([], [
-    atom.title([], config.domain()),
-    atom.id([], config.domain()),
+    atom.title([], config.domain(config)),
+    atom.id([], config.domain(config)),
     atom.updated([], now()),
     atom.link([
       attribute.rel("self"),
       route.Feed
         |> route.target
-        |> route.abs()
+        |> route.abs(on: config.base)
         |> component.absolute_href(),
     ]),
-    atom.author([], [atom.name([], config.author())]),
+    atom.author([], [atom.name([], config.author)]),
     ..{
       use item <- list.map(items)
       atom.entry([], [

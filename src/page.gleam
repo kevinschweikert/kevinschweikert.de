@@ -1,5 +1,5 @@
 import component
-import config
+import config.{type Config}
 import djot
 import filepath
 import frontmatter
@@ -11,6 +11,7 @@ import gleam/order
 import gleam/result
 import gleam/string
 import gleam/time/calendar
+import gleam/uri
 import glimra
 import glimra/theme
 import lustre/attribute
@@ -35,7 +36,7 @@ pub type Source {
 }
 
 pub type Meta {
-  Meta(title: String, description: String, image: Image, author: String)
+  Meta(title: String, description: String, image: Image)
 }
 
 pub type Page {
@@ -101,10 +102,8 @@ fn extract_meta(frontmatter: option.Option(String)) -> #(calendar.Date, Meta) {
   let assert Ok(title) = tom.get_string(metadata, ["title"])
   let assert Ok(description) = tom.get_string(metadata, ["description"])
   let assert Ok(published) = tom.get_date(metadata, ["published"])
-  let author =
-    tom.get_string(metadata, ["author"]) |> result.unwrap(config.author())
 
-  #(published, Meta(title:, description:, author:, image: Generated))
+  #(published, Meta(title:, description:, image: Generated))
 }
 
 pub fn git_hash(src: Source) -> option.Option(String) {
@@ -147,31 +146,31 @@ pub fn rel_path(page: Page) -> route.Rel {
   route.of(page.route)
 }
 
-pub fn abs_path(page: Page) -> route.Abs {
+pub fn abs_path(page: Page, base: uri.Uri) -> route.Abs {
   page
   |> rel_path()
-  |> route.abs()
+  |> route.abs(on: base)
 }
 
-pub fn to_sitemap_item(page: Page) -> SitemapItem {
+pub fn to_sitemap_item(page: Page, config: config.Config) -> SitemapItem {
   SitemapItem(
-    url: abs_path(page),
+    url: abs_path(page, config.base),
     lastmod: updated_date(page) |> option.unwrap(page.published),
   )
 }
 
-pub fn to_feed_item(page: Page) -> Result(FeedItem, Nil) {
+pub fn to_feed_item(page: Page, config: Config) -> Result(FeedItem, Nil) {
   case page.route {
     route.Article(slug:) ->
       Ok(FeedItem(
         id: slug,
         title: page.meta.title,
         description: page.meta.description,
-        url: abs_path(page),
+        url: abs_path(page, config.base),
         published: page.published,
         updated: updated_date(page) |> option.unwrap(page.published),
         html: page
-          |> to_minimal_elements()
+          |> to_minimal_elements(config)
           |> element.fragment()
           |> element.to_string(),
       ))
@@ -179,7 +178,7 @@ pub fn to_feed_item(page: Page) -> Result(FeedItem, Nil) {
   }
 }
 
-fn common(page: Page) {
+fn common(page: Page, config: Config) {
   [
     html.h1([], [html.text(page.meta.title)]),
     html.div([attribute.class("text-sm")], [
@@ -202,7 +201,7 @@ fn common(page: Page) {
             let short = string.slice(hash, 0, 8)
             element.fragment([
               html.text(" · "),
-              html.a([attribute.href(config.repo() <> "/commit/" <> hash)], [
+              html.a([attribute.href(config.commit_url(config, hash))], [
                 html.text(short),
               ]),
             ])
@@ -214,13 +213,16 @@ fn common(page: Page) {
   ]
 }
 
-pub fn to_elements(page: Page) -> List(element.Element(Nil)) {
-  common(page)
+pub fn to_elements(page: Page, config: Config) -> List(element.Element(Nil)) {
+  common(page, config)
   |> list.append(render(page.src))
 }
 
-pub fn to_minimal_elements(page: Page) -> List(element.Element(Nil)) {
-  common(page)
+pub fn to_minimal_elements(
+  page: Page,
+  config: Config,
+) -> List(element.Element(Nil)) {
+  common(page, config)
   |> list.append(render_minimal(page.src))
 }
 

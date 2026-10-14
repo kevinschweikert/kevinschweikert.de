@@ -1,4 +1,3 @@
-import config
 import filepath
 import gleam/option
 import gleam/string
@@ -30,9 +29,9 @@ pub opaque type Rel {
   Rel(uri.Uri, Kind)
 }
 
-pub fn abs(rel: Rel) -> Abs {
+pub fn abs(rel: Rel, on base: uri.Uri) -> Abs {
   let Rel(u, kind) = rel
-  let assert Ok(u) = config.root_url() |> uri.merge(u)
+  let assert Ok(u) = uri.merge(base, u)
   Abs(u, kind)
 }
 

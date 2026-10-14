@@ -12,10 +12,6 @@ import lustre/element
 import lustre/element/html
 import page
 
-pub const title = "kevinschweikert.de"
-
-pub const description = "Hi! I'm Kevin Schweikert, a software engineer with a media technology background and a passion for neapolitan pizza 🍕"
-
 pub fn view(posts: List(page.Page)) -> List(element.Element(a)) {
   let posts_by_year =
     posts
