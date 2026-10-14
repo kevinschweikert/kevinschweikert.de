@@ -1,9 +1,8 @@
-import config.{type Config}
 import lustre/attribute
 import lustre/element/html
 import opengraph
-import page
 import route
+import site.{Site}
 
 const plausible_source =
   "https://plausible.kevinschweikert.de/js/pa-Xjy2lqLyTD7zfUCRDjM3k.js"
@@ -12,7 +11,8 @@ const plausible_script =
   "window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
   plausible.init()"
 
-pub fn root(page: page.Page, config: Config) {
+pub fn root(page: site.Page, site: site.Site) {
+  let Site(config:, ..) = site
   html.html([attribute.lang("en")], [
     html.head([], [
       html.title([], page.meta.title),
@@ -21,7 +21,7 @@ pub fn root(page: page.Page, config: Config) {
         attribute.rel("canonical"),
         attribute.href(
           page
-          |> page.rel_path()
+          |> site.rel_path()
           |> route.abs(on: config.base)
           |> route.abs_string(),
         ),
@@ -67,7 +67,7 @@ pub fn root(page: page.Page, config: Config) {
       ]),
       opengraph.description(page.meta.description),
       opengraph.title(page.meta.title),
-      opengraph.url(page.abs_path(page, config.base)),
+      opengraph.url(site.abs_path(page, config.base)),
 
       case page.route {
         route.Article(_) ->
@@ -152,7 +152,7 @@ pub fn root(page: page.Page, config: Config) {
               "flex-1 min-w-0 w-full max-w-3xl mx-auto prose dark:prose-invert prose-catppuccin prose-img:rounded-lg  prose-a:no-underline prose-a:hover:underline prose-pre:text-ctp-base dark:prose-pre:text-ctp-text",
             ),
           ],
-          page.to_elements(page, config),
+          site.to_elements(page, site),
         ),
         html.footer(
           [

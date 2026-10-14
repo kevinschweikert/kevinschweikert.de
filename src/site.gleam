@@ -1,9 +1,9 @@
 import component
 import config.{type Config}
+import content.{Revision}
 import djot
 import filepath
 import frontmatter
-import git
 import gleam/dict
 import gleam/list
 import gleam/option
@@ -13,6 +13,7 @@ import gleam/time/calendar
 import gleam/uri
 import glimra
 import glimra/theme
+import jot
 import lustre/attribute
 import lustre/element
 import lustre/element/html
@@ -20,27 +21,8 @@ import route.{type Route}
 import simplifile
 import tom
 
-pub type Revision {
-  Revision(hash: String, changed_at: calendar.Date)
-}
-
-pub type Image {
-  None
-  Generated
-  File(url: route.Rel)
-}
-
-pub type Body {
-  Djot(content: String)
-  Elements(elements: List(element.Element(Nil)))
-}
-
-pub type Source {
-  Source(path: String, revision: option.Option(Revision))
-}
-
-pub type Meta {
-  Meta(title: String, description: String, image: Image)
+pub type Site {
+  Site(config: config.Config, pages: List(Page))
 }
 
 pub type Page {
@@ -49,24 +31,17 @@ pub type Page {
     route: Route,
     meta: Meta,
     body: Body,
-    source: option.Option(Source),
+    source: option.Option(content.Source),
   )
 }
 
-pub type SitemapItem {
-  SitemapItem(url: route.Abs, lastmod: calendar.Date)
+pub type Body {
+  Djot(jot.Document)
+  Computed(fn(Site) -> List(element.Element(Nil)))
 }
 
-pub type FeedItem {
-  FeedItem(
-    id: String,
-    title: String,
-    description: String,
-    url: route.Abs,
-    published: calendar.Date,
-    updated: calendar.Date,
-    html: String,
-  )
+pub type Meta {
+  Meta(title: String, description: String)
 }
 
 pub fn from_folder(path: String, to_route: fn(String) -> Route) -> List(Page) {
@@ -95,9 +70,9 @@ pub fn from_folder(path: String, to_route: fn(String) -> Route) -> List(Page) {
 
   let #(published, meta) = extract_meta(frontmatter)
   let full_path = filepath.join(path, filename)
-  let source = source(full_path)
+  let source = content.source(full_path)
   let body = case filepath.extension(filename) {
-    Ok("dj") | Ok("djot") -> Djot(content:)
+    Ok("dj") | Ok("djot") -> Djot(jot.parse(content))
     Ok(_) -> panic as "filetype not supported"
     Error(_) -> panic
   }
@@ -108,27 +83,13 @@ pub fn from_folder(path: String, to_route: fn(String) -> Route) -> List(Page) {
   Page(published:, meta:, body:, source:, route:)
 }
 
-pub fn source(path: String) -> option.Option(Source) {
-  option.Some(Source(path: path, revision: revision(path)))
-}
-
-fn revision(path: String) -> option.Option(Revision) {
-  {
-    use hash <- result.try(git.full_hash(path))
-    use changed_at <- result.map(git.last_changed_at(path))
-    Revision(hash:, changed_at:)
-  }
-  |> option.from_result()
-}
-
 fn extract_meta(frontmatter: option.Option(String)) -> #(calendar.Date, Meta) {
   let assert Ok(metadata) = tom.parse(frontmatter |> option.unwrap(""))
-
   let assert Ok(title) = tom.get_string(metadata, ["title"])
   let assert Ok(description) = tom.get_string(metadata, ["description"])
   let assert Ok(published) = tom.get_date(metadata, ["published"])
 
-  #(published, Meta(title:, description:, image: Generated))
+  #(published, Meta(title:, description:))
 }
 
 pub fn updated_date(page: Page) -> option.Option(calendar.Date) {
@@ -151,32 +112,6 @@ pub fn abs_path(page: Page, base: uri.Uri) -> route.Abs {
   page
   |> rel_path()
   |> route.abs(on: base)
-}
-
-pub fn to_sitemap_item(page: Page, config: config.Config) -> SitemapItem {
-  SitemapItem(
-    url: abs_path(page, config.base),
-    lastmod: updated_date(page) |> option.unwrap(page.published),
-  )
-}
-
-pub fn to_feed_item(page: Page, config: Config) -> Result(FeedItem, Nil) {
-  case page.route {
-    route.Article(slug:) ->
-      Ok(FeedItem(
-        id: slug,
-        title: page.meta.title,
-        description: page.meta.description,
-        url: abs_path(page, config.base),
-        published: page.published,
-        updated: updated_date(page) |> option.unwrap(page.published),
-        html: page
-          |> to_minimal_elements(config)
-          |> element.fragment()
-          |> element.to_string(),
-      ))
-    _ -> Error(Nil)
-  }
 }
 
 fn common(page: Page, config: Config) {
@@ -219,30 +154,30 @@ fn common(page: Page, config: Config) {
   ]
 }
 
-pub fn to_elements(page: Page, config: Config) -> List(element.Element(Nil)) {
-  common(page, config)
-  |> list.append(render(page.body))
+pub fn to_elements(page: Page, site: Site) -> List(element.Element(Nil)) {
+  common(page, site.config)
+  |> list.append(render(page.body, site))
 }
 
 pub fn to_minimal_elements(
   page: Page,
-  config: Config,
+  site: Site,
 ) -> List(element.Element(Nil)) {
-  common(page, config)
-  |> list.append(render_minimal(page.body))
+  common(page, site.config)
+  |> list.append(render_minimal(page.body, site))
 }
 
-fn render(body: Body) -> List(element.Element(Nil)) {
+fn render(body: Body, site: Site) -> List(element.Element(Nil)) {
   case body {
-    Djot(content:) -> djot.render(content, styled_renderer())
-    Elements(elements:) -> elements
+    Djot(document) -> djot.render(document, styled_renderer())
+    Computed(view) -> view(site)
   }
 }
 
-fn render_minimal(body: Body) -> List(element.Element(Nil)) {
+fn render_minimal(body: Body, site: Site) -> List(element.Element(Nil)) {
   case body {
-    Djot(content:) -> djot.render(content, djot.default_renderer())
-    Elements(elements:) -> elements
+    Djot(document) -> djot.render(document, djot.default_renderer())
+    Computed(view) -> view(site)
   }
 }
 

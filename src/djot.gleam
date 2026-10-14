@@ -198,9 +198,9 @@ pub fn default_renderer() -> Renderer(Element(msg)) {
 
 /// Render a djot document using the given renderer.
 ///
-pub fn render(content: String, renderer: Renderer(view)) -> List(view) {
+pub fn render(document: jot.Document, renderer: Renderer(view)) -> List(view) {
   let Document(content:, references:, reference_attributes:, footnotes: _) =
-    jot.parse(content)
+    document
 
   content
   |> list.map(render_block(_, references, reference_attributes, renderer))

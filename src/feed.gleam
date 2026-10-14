@@ -1,19 +1,21 @@
 import atom
 import component
-import config.{type Config}
 import gleam/list
+import gleam/option
 import gleam/time/calendar
 import gleam/time/timestamp
+import gleam/uri
 import helper
 import lustre/attribute
 import lustre/element
-import page
 import route
+import site
 
-pub fn build(items: List(page.FeedItem), config: Config) -> element.Element(a) {
+pub fn build(site: site.Site) -> element.Element(a) {
+  let site.Site(config:, pages:) = site
   atom.feed([], [
-    atom.title([], config.domain(config)),
-    atom.id([], config.domain(config)),
+    atom.title([], config.title),
+    atom.id([], uri.to_string(config.base)),
     atom.updated([], now()),
     atom.link([
       attribute.rel("self"),
@@ -24,19 +26,37 @@ pub fn build(items: List(page.FeedItem), config: Config) -> element.Element(a) {
     ]),
     atom.author([], [atom.name([], config.author)]),
     ..{
-      use item <- list.map(items)
-      atom.entry([], [
-        atom.title([], item.title),
-        atom.link([
-          attribute.rel("alternate"),
-          component.absolute_href(item.url),
-        ]),
-        atom.id([], item.id),
-        atom.published([], item.published |> helper.date_to_datetime()),
-        atom.updated([], item.updated |> helper.date_to_datetime()),
-        atom.summary([], item.description),
-        atom.content([], item.html),
-      ])
+      use page <- list.filter_map(pages)
+      case page.route {
+        route.Article(slug:) -> {
+          let id = slug
+          let title = page.meta.title
+          let description = page.meta.description
+          let url = site.abs_path(page, site.config.base)
+          let published = page.published
+          let updated = site.updated_date(page) |> option.unwrap(page.published)
+          let html =
+            page
+            |> site.to_minimal_elements(site)
+            |> element.fragment()
+            |> element.to_string()
+          Ok(
+            atom.entry([], [
+              atom.title([], title),
+              atom.link([
+                attribute.rel("alternate"),
+                component.absolute_href(url),
+              ]),
+              atom.id([], id),
+              atom.published([], published |> helper.date_to_datetime()),
+              atom.updated([], updated |> helper.date_to_datetime()),
+              atom.summary([], description),
+              atom.content([], html),
+            ]),
+          )
+        }
+        _ -> Error(Nil)
+      }
     }
   ])
 }

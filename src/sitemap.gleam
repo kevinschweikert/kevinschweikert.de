@@ -1,18 +1,20 @@
 import gleam/list
+import gleam/option
 import gleam/time/calendar
 import helper
 import lustre/attribute
 import lustre/element
-import page
 import route
+import site
 
-pub fn build(items: List(page.SitemapItem)) {
+pub fn build(site: site.Site) {
+  let site.Site(config:, pages:) = site
   urlset({
-    use item <- list.map(items)
+    use page <- list.map(pages)
 
     url([
-      loc(item.url |> route.abs_string()),
-      lastmod(item.lastmod),
+      loc(site.abs_path(page, config.base) |> route.abs_string()),
+      lastmod(site.updated_date(page) |> option.unwrap(page.published)),
     ])
   })
 }

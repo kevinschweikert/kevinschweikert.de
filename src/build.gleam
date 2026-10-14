@@ -1,5 +1,6 @@
 import component
 import config
+import content
 import envoy
 import feed
 import gleam/list
@@ -9,13 +10,13 @@ import gleam/time/duration
 import gleam/time/timestamp
 import gleam/uri
 import helper
-import index
+import home
 import layout
 import lustre/element
 import output.{Bytes, Output, Text}
-import page
 import route
 import simplifile
+import site
 import sitemap
 import typst
 
@@ -27,7 +28,7 @@ const post_path: String = "./posts"
 
 const drafts_path: String = "./drafts"
 
-const index_path: String = "./src/index.gleam"
+const home_path: String = "./src/home.gleam"
 
 const typst_template_path: String = "./src/template.typ"
 
@@ -60,52 +61,41 @@ pub fn main() -> #(Int, duration.Unit) {
   let assert Ok(_) = simplifile.copy_directory("./assets", out_dir)
 
   let drafts = case show_drafts {
-    True -> page.from_folder(drafts_path, fn(slug) { route.Article(slug) })
+    True -> site.from_folder(drafts_path, route.Article)
     False -> []
   }
 
-  let posts =
+  let content_pages =
     post_path
-    |> page.from_folder(fn(slug) { route.Article(slug) })
+    |> site.from_folder(route.Article)
     |> list.append(drafts)
+    |> list.append(site.from_folder(pages_path, route.Standalone))
 
-  let pages = page.from_folder(pages_path, fn(slug) { route.Standalone(slug) })
-
-  let index =
-    page.Page(
+  let home =
+    site.Page(
       route: route.Home,
       published: calendar.Date(2026, calendar.January, 18),
-      source: page.source(index_path),
-      body: page.Elements(index.view(posts)),
-      meta: page.Meta(
-        title: config.title,
-        description: config.description,
-        image: page.Generated,
-      ),
+      source: content.source(home_path),
+      body: site.Computed(home.view),
+      meta: site.Meta(title: config.title, description: config.description),
     )
 
-  create_page(page.rel_path(index), layout.root(index, config))
+  let site = site.Site(config:, pages: [home, ..content_pages])
 
-  list.each(pages, fn(page) {
-    create_page(page.rel_path(page), layout.root(page, config))
-  })
-  list.each(posts, fn(page) {
-    create_page(page.rel_path(page), layout.root(page, config))
+  site.pages
+  |> list.map(fn(page) {
+    create_page(site.rel_path(page), layout.root(page, site))
   })
 
-  [index]
-  |> list.append(pages)
-  |> list.append(posts)
-  |> list.map(page.to_sitemap_item(_, config))
+  site
   |> sitemap.build()
   |> component.to_xml_docstring()
   |> Text()
   |> Output(path: route.target(route.Sitemap), contents: _)
   |> output.write(out_dir, _)
 
-  posts
-  |> list.filter_map(page.to_feed_item(_, config))
-  |> feed.build(config)
+  site
+  |> feed.build()
   |> component.to_xml_docstring()
   |> Text()
   |> Output(path: route.target(route.Feed), contents: _)
@@ -113,9 +103,7 @@ pub fn main() -> #(Int, duration.Unit) {
 
   let assert Ok(markup) = simplifile.read(typst_template_path)
 
-  [index]
-  |> list.append(pages)
-  |> list.append(posts)
+  site.pages
   |> list.each(create_image(markup, _, config))
 
   let end = timestamp.system_time()
@@ -128,7 +116,7 @@ fn create_page(path: route.Rel, element: element.Element(a)) -> Nil {
   |> output.write(out_dir, _)
 }
 
-fn create_image(markup: String, page: page.Page, config: config.Config) -> Nil {
+fn create_image(markup: String, page: site.Page, config: config.Config) -> Nil {
   let assert Ok(png) =
     typst.new(markup)
     |> typst.add_binding("title", page.meta.title)
