@@ -7,7 +7,6 @@ import git
 import gleam/dict
 import gleam/list
 import gleam/option
-import gleam/order
 import gleam/result
 import gleam/string
 import gleam/time/calendar
@@ -21,18 +20,23 @@ import route.{type Route}
 import simplifile
 import tom
 
+pub type Revision {
+  Revision(hash: String, changed_at: calendar.Date)
+}
+
 pub type Image {
   None
   Generated
   File(url: route.Rel)
 }
 
+pub type Body {
+  Djot(content: String)
+  Elements(elements: List(element.Element(Nil)))
+}
+
 pub type Source {
-  Djot(content: String, path: String)
-  Elements(
-    elements: List(element.Element(Nil)),
-    origin_path: option.Option(String),
-  )
+  Source(path: String, revision: option.Option(Revision))
 }
 
 pub type Meta {
@@ -40,7 +44,13 @@ pub type Meta {
 }
 
 pub type Page {
-  Page(published: calendar.Date, route: Route, meta: Meta, src: Source)
+  Page(
+    published: calendar.Date,
+    route: Route,
+    meta: Meta,
+    body: Body,
+    source: option.Option(Source),
+  )
 }
 
 pub type SitemapItem {
@@ -84,8 +94,10 @@ pub fn from_folder(path: String, to_route: fn(String) -> Route) -> List(Page) {
     frontmatter.extract(content)
 
   let #(published, meta) = extract_meta(frontmatter)
-  let src = case filepath.extension(filename) {
-    Ok("dj") | Ok("djot") -> Djot(content:, path: filepath.join(path, filename))
+  let full_path = filepath.join(path, filename)
+  let source = source(full_path)
+  let body = case filepath.extension(filename) {
+    Ok("dj") | Ok("djot") -> Djot(content:)
     Ok(_) -> panic as "filetype not supported"
     Error(_) -> panic
   }
@@ -93,7 +105,20 @@ pub fn from_folder(path: String, to_route: fn(String) -> Route) -> List(Page) {
   let slug = filename |> filepath.base_name |> filepath.strip_extension()
   let route = to_route(slug)
 
-  Page(published:, meta:, src:, route:)
+  Page(published:, meta:, body:, source:, route:)
+}
+
+pub fn source(path: String) -> option.Option(Source) {
+  option.Some(Source(path: path, revision: revision(path)))
+}
+
+fn revision(path: String) -> option.Option(Revision) {
+  {
+    use hash <- result.try(git.full_hash(path))
+    use changed_at <- result.map(git.last_changed_at(path))
+    Revision(hash:, changed_at:)
+  }
+  |> option.from_result()
 }
 
 fn extract_meta(frontmatter: option.Option(String)) -> #(calendar.Date, Meta) {
@@ -106,39 +131,15 @@ fn extract_meta(frontmatter: option.Option(String)) -> #(calendar.Date, Meta) {
   #(published, Meta(title:, description:, image: Generated))
 }
 
-pub fn git_hash(src: Source) -> option.Option(String) {
-  case src {
-    Djot(content: _, path:) -> git.full_hash(path) |> option.from_result()
-    Elements(elements: _, origin_path:) ->
-      case origin_path {
-        option.Some(path) -> git.full_hash(path) |> option.from_result()
-        option.None -> option.None
-      }
-  }
-}
-
-pub fn last_changed_at(src: Source) -> option.Option(calendar.Date) {
-  case src {
-    Djot(content: _, path:) -> git.last_changed_at(path) |> option.from_result()
-    Elements(elements: _, origin_path:) ->
-      case origin_path {
-        option.Some(path) -> git.last_changed_at(path) |> option.from_result()
-        option.None -> option.None
-      }
-  }
-}
-
 pub fn updated_date(page: Page) -> option.Option(calendar.Date) {
-  let last_changed_at = last_changed_at(page.src)
-
-  case last_changed_at {
-    option.Some(changed) -> {
-      case calendar.naive_date_compare(changed, page.published) {
-        order.Gt -> last_changed_at
-        _ -> option.None
+  case page.source {
+    option.Some(src) -> {
+      case src.revision {
+        option.Some(Revision(changed_at:, ..)) -> option.Some(changed_at)
+        option.None -> option.None
       }
     }
-    _ -> option.None
+    option.None -> option.None
   }
 }
 
@@ -196,15 +197,20 @@ fn common(page: Page, config: Config) {
         }
       },
       {
-        case git_hash(page.src) {
-          option.Some(hash) -> {
-            let short = string.slice(hash, 0, 8)
-            element.fragment([
-              html.text(" · "),
-              html.a([attribute.href(config.commit_url(config, hash))], [
-                html.text(short),
-              ]),
-            ])
+        case page.source {
+          option.Some(src) -> {
+            case src.revision {
+              option.Some(Revision(hash:, ..)) -> {
+                let short = string.slice(hash, 0, 8)
+                element.fragment([
+                  html.text(" · "),
+                  html.a([attribute.href(config.commit_url(config, hash))], [
+                    html.text(short),
+                  ]),
+                ])
+              }
+              option.None -> element.fragment([])
+            }
           }
           option.None -> element.fragment([])
         }
@@ -215,7 +221,7 @@ fn common(page: Page, config: Config) {
 
 pub fn to_elements(page: Page, config: Config) -> List(element.Element(Nil)) {
   common(page, config)
-  |> list.append(render(page.src))
+  |> list.append(render(page.body))
 }
 
 pub fn to_minimal_elements(
@@ -223,20 +229,20 @@ pub fn to_minimal_elements(
   config: Config,
 ) -> List(element.Element(Nil)) {
   common(page, config)
-  |> list.append(render_minimal(page.src))
+  |> list.append(render_minimal(page.body))
 }
 
-fn render(source: Source) -> List(element.Element(Nil)) {
-  case source {
-    Djot(content:, path: _) -> djot.render(content, styled_renderer())
-    Elements(elements:, origin_path: _) -> elements
+fn render(body: Body) -> List(element.Element(Nil)) {
+  case body {
+    Djot(content:) -> djot.render(content, styled_renderer())
+    Elements(elements:) -> elements
   }
 }
 
-fn render_minimal(source: Source) -> List(element.Element(Nil)) {
-  case source {
-    Djot(content:, path: _) -> djot.render(content, djot.default_renderer())
-    Elements(elements:, origin_path: _) -> elements
+fn render_minimal(body: Body) -> List(element.Element(Nil)) {
+  case body {
+    Djot(content:) -> djot.render(content, djot.default_renderer())
+    Elements(elements:) -> elements
   }
 }
 

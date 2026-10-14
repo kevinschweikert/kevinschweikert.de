@@ -553,7 +553,7 @@ rebuild.
 
 ### The problem
 
-Here is `common()`, from `src/page.gleam:208`, which runs for every page:
+Here is `common()`, from `src/page.gleam:181`, which runs for every page:
 
 ```gleam
 case git_hash(page.src) {
@@ -586,6 +586,18 @@ them. A `Page` should be a complete answer, not a promise to go find out.
 This is the "parse, don't validate" idea applied to I/O. Do the uncertain work at
 the boundary, once, and hand the rest of the program something certain.
 
+Something is in the way of that, and it is why this chapter is harder than it
+reads. `page.Source` is two types sharing a name. Count the functions that match
+on it. `git_hash` at `src/page.gleam:113` and `last_changed_at` at `:124`
+destructure it to reach a file path. `render` at `:234` and `render_minimal` at
+`:241` destructure it to reach a body. Nothing uses both halves.
+
+That is the split line, and it is already drawn in your own code. The provenance
+half is what this chapter needs and it becomes `Source`. The body half is what
+chapter 5 needs and it becomes `Body`. Do the rename here rather than there, so
+the old name and the new one never exist at the same time, and so chapter 5 is
+left changing only what the variants hold.
+
 ### The work
 
 ```gleam
@@ -601,13 +613,47 @@ pub type Source {
   Source(path: String, revision: Option(Revision))
 }
 
-pub type Meta {
-  Meta(title: String, description: String, author: String)
+pub type Body {
+  Djot(content: String)
+  Elements(List(element.Element(Nil)))
+}
+
+pub type Page {
+  Page(
+    route: route.Route,
+    published: calendar.Date,
+    meta: Meta,
+    source: Option(Source),
+    body: Body,
+  )
 }
 ```
 
-Discovery resolves the `Revision` and stores it. `common()` reads
-`page.source.revision` and does no I/O.
+`Meta` moves across unchanged. Chapter 3 already took `author` off it, and
+chapter 5 takes `image`, so this chapter has no business with it.
+
+Notice what the old variants lose. `Djot` gives up `path` and `Elements` gives up
+`origin_path`, because both of those were provenance wearing a body's clothes.
+They move into `Source`, which is the whole point of the split: there was one
+idea, "the file this came from, maybe", spelled two different ways depending on
+which variant you were holding.
+
+The two `Option`s are not one `Option` in disguise, and it is worth being
+deliberate about keeping them apart. `source: None` means there is no file behind
+this page at all, which is what chapter 5's computed pages will be.
+`Some(Source(path, revision: None))` means there is a file and git has never seen
+it. That second case is live today: `git.full_hash` fails on an untracked file
+and `option.from_result` quietly turns it into `None`, which is how a draft you
+have not committed renders without a commit link. Flatten the two and you lose
+the ability to tell a page with no file from a file with no history.
+
+Discovery resolves the `Revision` once, with one `git.full_hash` and one
+`git.last_changed_at` per file, and stores it. `build.gleam`'s hand-built index
+page gets a `Source` too, pointing at `./src/index.gleam`.
+
+Then three things fall out. `git_hash/1` and `last_changed_at/1` delete outright.
+`updated_date` stops taking a `Page` so it can go and ask the disk, and becomes a
+comparison between two dates it is handed. `common()` reads a field.
 
 While you are in the FFI, quote the path.
 
@@ -620,7 +666,10 @@ time just build
 
 The build currently takes about a second, most of it process spawning. Expect
 that to drop. More importantly, rendering is now a pure function, which is what
-makes chapter 11's tests possible.
+makes chapter 10's tests possible.
+
+The diff should be clean apart from the feed timestamp. Two unchanging facts
+computed once instead of six times are still the same two facts.
 
 ---
 

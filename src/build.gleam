@@ -3,7 +3,6 @@ import config
 import envoy
 import feed
 import gleam/list
-import gleam/option
 import gleam/result
 import gleam/time/calendar
 import gleam/time/duration
@@ -76,10 +75,8 @@ pub fn main() -> #(Int, duration.Unit) {
     page.Page(
       route: route.Home,
       published: calendar.Date(2026, calendar.January, 18),
-      src: page.Elements(
-        index.view(posts),
-        origin_path: option.Some(index_path),
-      ),
+      source: page.source(index_path),
+      body: page.Elements(index.view(posts)),
       meta: page.Meta(
         title: config.title,
         description: config.description,
