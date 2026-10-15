@@ -104,6 +104,11 @@ pub fn abs_string(abs: Abs) -> String {
   uri.to_string(canonicalized_uri)
 }
 
+pub fn abs_uri(abs: Abs) -> uri.Uri {
+  let Abs(uri, kind) = abs
+  uri.Uri(..uri, path: uri.path |> canonicalize(kind))
+}
+
 fn canonicalize(string: String, kind: Kind) -> String {
   case kind, string, string.ends_with(string, "/") {
     Page, "", _ -> "/"

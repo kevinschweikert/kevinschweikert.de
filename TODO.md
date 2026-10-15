@@ -36,18 +36,20 @@ function. Rendering one page triggers roughly six `os:cmd` calls, recomputing th
 same two facts across `to_elements`, `to_sitemap_item` and `to_feed_item`. You
 cannot ask a `Page` when it was last updated. You can only ask the disk.
 
-**The `Renderer(view)` record is the wrong size.** It has 22 fields and is
-generic over `view`. In this codebase `view` is always `element.Element(Nil)`,
-there are exactly two instances of the record, and they differ in two fields, one
-of which is identical in both anyway. Roughly 290 lines of `src/djot.gleam`, plus
-all the `render_block` and `render_inline` dispatch, exist to vary one real
-behaviour: whether code blocks get syntax highlighted.
+**The `Renderer(view)` record is the wrong shape.** It has 22 fields, one per
+kind of node, and is generic over `view`, which in this codebase is always
+`element.Element(Nil)`. Its callbacks receive arguments the dispatch has already
+picked apart rather than the node, so some decisions are made before any
+renderer is asked, and one of them silently drops footnotes. Overrides work by
+record spread, which hides what an override changed. And the two outputs it
+serves, the page and the feed, differ less than they should: the feed ships the
+site's relative URLs to readers that cannot resolve them.
 
-That last one deserves a word of defence for the original. lustre_ssg is a
-library. Its consumers are unknown, so a fully general renderer record is the
-right call there. You are a known consumer with one target. Copying the
-generality without the uncertainty that justified it is how abstractions go
-stale.
+That one deserves a word of defence for the original. lustre_ssg is a library.
+Its consumers are unknown, so handing each callback a pre-digested slice of the
+node keeps its API stable whatever jot does next. You are a known consumer with
+two known outputs. Copying the library's compromises without the uncertainty
+that justified them is how abstractions go stale.
 
 `src/route.gleam` is the counter-example and the model for all of this. Opaque
 types, one invariant, one place that enforces it. The rewrite is mostly a matter
@@ -767,81 +769,526 @@ revision of the view file itself. Expect that one date to change in the diff.
 
 ---
 
-## Chapter 6: Twenty-two fields become two
+## Chapter 6: A visitor the right shape
 
 ### The problem
 
-`src/djot.gleam` defines a 22-field renderer record, generic over `view`. The
-project creates two of them. `page.styled_renderer` is written as
-`Renderer(..default_renderer(), codeblock: ..., image: ...)`, so it overrides two
-fields. The `image` override produces a `<figure>` with a caption. The dead
-`src/render.gleam` contains a third copy of that same image override.
+`src/djot.gleam` is lustre_ssg's renderer, copied in: a `Renderer(view)` record
+with 22 fields, one per kind of node, generic over `view`. `site.styled_renderer`
+at `src/site.gleam:184` builds one as
+`Renderer(..default_renderer(), codeblock: ..., image: ...)`, and the feed uses
+`default_renderer()` as it is. The dead `src/render.gleam` holds a third, with
+its `codeblock` override commented out.
 
-So: one record, 22 fields, two instances, one genuine difference.
+The visitor itself is the right idea. You want to decide how each kind of node
+becomes markup, and you have two outputs that decide differently. Three details
+of this particular visitor get in the way.
+
+The callbacks receive arguments the dispatch has already chewed. `link` gets an
+`Option(String)`, a dict and some children, never the node. `span`, `insert`,
+`delete` and `mark` get their content flattened to a `String`, so formatting
+inside them is gone before any renderer sees it. Some nodes never reach a
+callback at all. `src/djot.gleam:381` turns `jot.Footnote(_)` into
+`renderer.text("")` and `:202` throws away the document's `footnotes`.
+`pages/uses.dj:11` uses a footnote that `:50` defines, so "KVM stands for
+Keyboard, Video and Mouse" never reaches the page. No renderer can fix that,
+because the decision was made before any renderer was asked.
+
+Overrides work by record spread. `..default_renderer()` quietly fills every field
+you did not name, so the only way to see how the browser differs from the feed
+is to diff two record literals in your head. The commented-out field in
+`render.gleam` is what that looks like after a while.
+
+The recursion lives in the dispatch. That is why `render_block` and
+`render_inline` pass `references, reference_attributes, renderer` into every
+call, and why each arm runs to fifteen lines.
+
+Then there is the feed. Feed content is read in someone else's app, which has no
+base URL and never loads your stylesheet. Today it gets the same relative URLs
+as the site, three of them: `/files/composable-sftp-streams.livemd`,
+`/images/ha_my_switch.png` and `/contact/`. A reader resolves those against the
+wrong host or not at all. It also carries inline list styles, `data-*`
+attributes and class hooks that mean nothing outside your CSS.
+
+Two smaller bugs ride along. `src/djot.gleam:181` prepends `attribute.class(class)`
+to attributes jot has already given that class, so `::: info` renders as
+`<div class="info info">`. And `:77` passes the code fence language through as
+written while glimra lowercases it, so a `JSON` fence would get different
+`data-lang` values on the page and in the feed.
 
 ### The idea
 
-An abstraction should be the size of the variation it covers. The variation here
-is two functions, so the abstraction is two functions.
+Keep the visitor and change its shape. Two fields, one per node family, and
+each one receives the node itself:
 
 ```gleam
 // src/djot/render.gleam
 
-pub type Context {
-  Context(
-    link: fn(jot.Destination) -> String,
-    code: fn(Option(String), String) -> element.Element(Nil),
+pub type Renderer {
+  Renderer(
+    block: fn(Block, Context) -> Element(Nil),
+    inline: fn(Inline, Context) -> Element(Nil),
   )
 }
 
-pub fn document(doc: jot.Document, ctx: Context) -> List(element.Element(Nil))
+pub opaque type Context {
+  Context(renderer: Renderer)
+}
 ```
 
-The site passes a `code` that calls glimra. The feed passes one that does not.
-Everything else is a direct pattern match on `jot.Container` and `jot.Inline`.
+`Block` and `Inline` are this module's own types, not `jot.Container` and
+`jot.Inline`. That is the one addition this chapter makes beyond handing a
+renderer the node as-is, and it is worth being honest about why: the first cut
+of this design tried to get away with reusing jot's types directly, resolving
+destinations and footnote keys as a side effect of traversal, and it broke the
+same way twice.
 
-There is a second payoff. glimra is now named in exactly one place, the function
-you pass in. You mentioned wanting to look at alternatives, and this is what
-makes that a one-function change instead of an archaeology project. Its grammar
-list covers bash, c, css, elixir, erlang, gleam, go, html, javascript, json,
-python and rust, which is why your `iex` block is not highlighted today.
+The first crack was `jot.Destination`. A `Link` or `Image` whose destination had
+already been resolved was still typed `jot.Destination`, which has two
+constructors, `Url` and `Reference`. Nothing stopped an override from matching
+`Reference` and doing something with it, or from being written against a
+destination that was never resolved in the first place, because the type could
+not tell the difference between "resolved" and "not resolved". The only honest
+fix available with jot's own type was `let assert jot.Url(url) = destination` at
+every call site that needed the URL, a loud trust boundary rather than a silent
+one, but still a value every override had to independently remember to narrow.
 
-Note that `link` returns `String`, not `Result`. That is deliberate and it is a
-promise chapter 9 will keep: validation runs before rendering, so by the time the
-renderer sees a destination it is already known good.
+The second crack was worse, because it was not about one field, it was about an
+entire convention. A footnote reference and its endnote need to agree on an id
+scheme, and "agree" meant two separate pieces of code each formatting a string
+with the same prefix. A function shared between them, `footnote_anchor(key)`,
+only narrows the problem: it is still something a call site can choose not to
+call. Nothing in `jot.Inline`'s shape makes a mismatched id unrepresentable.
+
+Both cracks have the same shape: a renderer was being handed raw material and
+trusted to process it correctly, when the processing was not a rendering
+decision at all, it was referential integrity. The fix is the one this book
+already uses for I/O in chapter 4, applied to djot's own indirections. Resolve
+every `Destination` and every footnote key exactly once, at a boundary, into a
+type that has no constructor for the unresolved state:
+
+```gleam
+pub type Block {
+  ThematicBreak
+  Paragraph(attributes: Dict(String, String), content: List(Inline))
+  Heading(attributes: Dict(String, String), level: Int, content: List(Inline))
+  Codeblock(attributes: Dict(String, String), language: Option(String), content: String)
+  RawBlock(content: String)
+  BulletList(layout: jot.ListLayout, style: jot.BulletStyle, items: List(List(Block)))
+  OrderedList(
+    layout: jot.ListLayout,
+    punctuation: jot.OrdinalPunctuation,
+    ordinal: jot.OrdinalStyle,
+    start: Int,
+    items: List(List(Block)),
+  )
+  BlockQuote(attributes: Dict(String, String), items: List(Block))
+  Div(attributes: Dict(String, String), items: List(Block))
+  Footnotes(entries: List(FootnoteEntry))
+}
+
+pub type FootnoteEntry {
+  FootnoteEntry(note_id: String, label: String, content: List(Block))
+}
+
+pub type Inline {
+  Linebreak
+  NonBreakingSpace
+  Text(String)
+  Link(attributes: Dict(String, String), content: List(Inline), url: String)
+  Image(attributes: Dict(String, String), content: List(Inline), url: String)
+  Span(attributes: Dict(String, String), content: List(Inline))
+  Emphasis(content: List(Inline))
+  Strong(content: List(Inline))
+  Delete(content: List(Inline))
+  Insert(content: List(Inline))
+  Mark(content: List(Inline))
+  Footnote(label: String, ref_id: String, note_id: String)
+  Code(content: String)
+  MathInline(content: String)
+  MathDisplay(content: String)
+  Symbol(content: String)
+}
+```
+
+`Link.url` and `Image.url` are bare `String`s. There is no `Reference`
+constructor anywhere in sight of a renderer, so there is nothing to narrow and
+nothing to forget to narrow. `Inline.Footnote` carries exactly the three
+strings a renderer needs, `label`, `ref_id`, `note_id`, already matched to
+whatever `Block.Footnotes` built for the same key, because both come from one
+computation, done once, not two independently-written ones that happen to agree
+today.
+
+That split, resolve once versus render repeatedly, is also why `Context` loses
+its `doc` field. The only reason it held the document before was to resolve
+references and footnote keys on demand, during traversal. Once that work moves
+to a separate pass that runs before any `Renderer` exists, `Context` has nothing
+left to do but carry the current `Renderer` along for recursion.
+
+Three things follow from `Block`/`Inline` carrying only resolved state.
+
+A renderer gets the node, so every decision belongs to the renderer. Nothing is
+left for a dispatch to decide on its behalf, and a footnote cannot get lost
+before anyone is asked about it, nor can it get a different id than the one its
+own endnote uses.
+
+Children render through the context, and the context renders through the
+current renderer. `render.blocks(ctx, items)` calls `ctx.renderer.block` on each
+item. This is open recursion, and it is what makes an override hold at every
+depth: when you render the feed, a code block inside a `::: tip` gets the feed's
+treatment without the feed saying anything about divs. `Footnotes` is an
+ordinary block under this same recursion, not a special case bolted onto the
+traversal: an output can override how the endnotes section looks, or drop it
+entirely, exactly as it would override `Div`.
+
+Overriding is a `case` with a fallback. The standard rendering is two plain
+functions in `djot/html.gleam`, exhaustive over every variant. An output matches
+the cases it cares about and hands the rest to `djot_html.block` or
+`djot_html.inline`. One function tells you exactly how an output differs from the
+standard, and the compiler keeps the standard exhaustive. Compare that with a
+spread, which tells you nothing.
+
+That gives you two ways to override, and both are ordinary functions. You can
+replace the output for a case, which is what the browser does for code blocks
+and images. Or you can rewrite the node and then delegate, which is what the
+feed does: it makes a `Link` or `Image`'s `url` absolute, then lets the standard
+rendering build the `<a>` and `<img>` it would have built anyway.
+
+There is no `view` parameter. Every output here is `Element(Nil)`, and a type
+parameter with one instantiation is a promise to a consumer who does not exist.
+
+There are two fields, `block` and `inline`, rather than one, and it is worth
+being precise about why that stays true even now that both are this module's
+own types rather than jot's. Containers and inlines are genuinely different
+grammars: a `Paragraph` can never appear where an `Inline` is expected, and a
+`Link` can never hold a `Paragraph` as a child. That is enforced today for free,
+by `content: List(Inline)` versus `items: List(Block)`, with no runtime check
+anywhere. A single `Node` type covering both would need every such field to be
+`List(Node)`, which makes that illegal nesting representable even though it can
+never actually happen, trading away a real guarantee for a shorter type
+definition. The footnote split shows exactly where this bites: a footnote
+reference carries no content at all, just three strings, while a footnote's
+definition is genuinely block content, jot stores it as `List(Container)` since
+a footnote can hold paragraphs or lists. Keeping `Block` and `Inline` separate
+is what lets `FootnoteEntry.content: List(Block)` and `Inline.Footnote`'s empty
+hands say that out loud, in the type, rather than leaving it as something only
+the author of the next renderer is expected to know.
+
+The API grows in two directions, both cheap. A third output, say an email
+newsletter, is another `Renderer` value with its own overrides. A change every
+output should get goes in `djot/html.gleam` once. A decision no output wants
+differently yet becomes a new field on `Renderer` the day one actually does, and
+the compiler then points at every `Renderer(...)` that has to supply it.
+
+glimra ends up named in exactly one place, the browser's code block override.
+That is what makes the alternatives at the end of this book a one-function
+change. Its grammar list covers bash, c, css, elixir, erlang, gleam, go, html,
+javascript, json, python and rust, which is why your `iex` block is not
+highlighted today.
 
 ### The work
 
-Write `src/djot/render.gleam` as a plain recursive function. Delete
-`src/djot.gleam` and `src/render.gleam`.
+Five pieces, in this order, each one checked against the golden copy before you
+start the next. The order matters. If the diff after a step shows anything it
+should not, you know which step caused it.
 
-Three bugs are worth fixing while you have the file open, because they are all
-one-line consequences of the old structure.
+**Step 1: resolve.**
 
-`src/djot.gleam:181` prepends `attribute.class(class)` to attributes that jot has
-already populated with that same class, so `::: info` renders as
-`<div class="info info">`.
+`src/djot/render.gleam` gains a pass that runs before any `Renderer` exists and
+never touches one. It is the only code in the project that imports
+`jot.Destination`'s constructors, and the only code that ever reads
+`doc.references`, `doc.reference_attributes` or `doc.footnotes`.
 
-`src/djot.gleam:381` renders `jot.Footnote(_)` as `renderer.text("")`, and `:202`
-discards the `footnotes` field of the document entirely. `pages/uses.dj:11` uses
-a footnote and `:50` defines it, so the marker vanishes and "KVM stands for
-Keyboard, Video and Mouse" never reaches the page. That is live content loss.
-`Document.footnotes` holds fully parsed blocks, so rendering them reuses the
-block path you just wrote.
+```gleam
+pub fn document(doc: jot.Document) -> List(Block)
+```
 
-`src/djot.gleam:77` passes the language through unlowercased while glimra
-lowercases it, so a `JSON` fence would produce different `data-lang` values on
-the page and in the feed.
+Walking `doc.content`, it turns every `jot.Container` into a `Block` and every
+`jot.Inline` into an `Inline`. Most variants carry straight across unchanged.
+Three do not.
+
+A `jot.Link` or `jot.Image`'s `destination` gets resolved and folded into
+`url: String`. A `jot.Url` resolves to itself with no attributes added. A
+`jot.Reference` looks up both reference dicts, merges the reference's
+attributes into the node's own (node's own on the left of `dict.merge`, so the
+diff stays clean), and the result becomes the node's `url`. A definition like
+
+```djot
+{title="The Gleam language"}
+[gleam]: https://gleam.run
+```
+
+gives every `[...][gleam]` link its URL and its `title`, and no renderer ever
+sees that a reference was involved. No document uses that today, and it stays
+supported anyway: the standard rendering supports the whole of djot, not just
+the parts this site happens to use, so a post you write next year can use any
+of it without a trip back into the renderer. If a key is not found, that is
+exactly what chapter 9's validator exists to catch before this code ever runs;
+leave the `url` as the original reference text in that case rather than
+crashing, so a document with no validator in front of it yet still renders
+instead of halting the build.
+
+`jot.Div`'s separate `class` field is dropped, folded into `attributes` the one
+time this pass runs over it. jot has already merged `class` into the
+attributes dict itself (`build/packages/jot/src/jot.gleam:622`), so once this
+conversion happens exactly once there is no second copy left anywhere for a
+renderer to read and double.
+
+A `jot.Footnote(reference)` and a `jot.Document`'s `footnotes` dict both come
+from one pass over `doc.footnotes`' keys, built once:
+
+```gleam
+type Anchor {
+  Anchor(label: String, ref_id: String, note_id: String)
+}
+
+fn anchors(footnotes: Dict(String, List(jot.Container))) -> Dict(String, Anchor) {
+  use key <- dict.map_values(footnotes)
+  let assert "^" <> label = key
+  Anchor(label:, ref_id: "fnref-" <> label, note_id: "fn-" <> label)
+}
+```
+
+Both jot's inline footnote reference and its definition key are seeded by jot
+itself with a leading `"^"` (`build/packages/jot/src/jot.gleam:1289` for the
+reference, `:435` for the definition), so a raw key reads `"^kvm"`, not `"kvm"`.
+This is where that gets stripped, once; nothing downstream needs to know jot
+does this.
+
+Every `jot.Footnote(reference)` becomes `Inline.Footnote(label:, ref_id:,
+note_id:)` by looking itself up in that same `anchors` dict, and the resolve
+pass appends one `Block.Footnotes(entries:)` built from the same dict, in
+sorted-key order, when `doc.footnotes` is non-empty. The inline reference and
+the endnote read the identical computed value; neither recomputes the id
+scheme, because there is no second place left that knows what the scheme is.
+
+**Step 2: traversal and the standard rendering.**
+
+```gleam
+pub fn blocks(ctx: Context, nodes: List(Block)) -> List(Element(Nil))
+pub fn inlines(ctx: Context, nodes: List(Inline)) -> List(Element(Nil))
+```
+
+Both are now pure dispatch, nothing else: `ctx.renderer.block`/`ctx.renderer.inline`
+on each node, no destination to resolve, no dict to consult, because step 1
+already did that work. This is also why `Context` only carries a `Renderer`
+now.
+
+`src/djot/html.gleam` is what djot means in plain HTML. It handles every
+variant of `Block` and `Inline`, passes author attributes through, and adds no
+CSS hooks. Import lustre's module as `lustre/element/html as h` to avoid the
+name clash.
+
+```gleam
+pub fn renderer() -> Renderer { Renderer(block:, inline:) }
+
+pub fn block(node: Block, ctx: Context) -> Element(Nil) {
+  case node {
+    Paragraph(a, content) -> h.p(attributes(a), render.inlines(ctx, content))
+    BlockQuote(a, items) -> h.blockquote(attributes(a), render.blocks(ctx, items))
+    Div(attributes: a, items:) -> h.div(attributes(a), render.blocks(ctx, items))
+    Codeblock(a, _, source) -> h.pre(attributes(a), [h.code([], [h.text(source)])])
+    Footnotes(entries:) -> h.text("")
+    // ...
+  }
+}
+```
+
+The rest of the standard rendering, so nothing gets dropped on the way:
+
+- `Span`, `Insert`, `Delete` and `Mark` render their children through
+  `render.inlines`. Today they flatten to a string, so `{=*very*=}` loses its
+  bold.
+- Bullet lists are a plain `<ul>`. Ordered lists are an `<ol>` with `start` when
+  it is not 1, and `type="a"` or `type="A"` for alphabetic ordinals. HTML has no
+  attribute for the `1)` versus `1.` punctuation, so it renders as a plain list.
+  Loose lists wrap each item's content in `<p>`, tight ones do not.
+- Inline and display math keep the `math inline` and `math display` classes
+  around `\(...\)` and `\[...\]`. Those classes are djot's convention for MathJax
+  and KaTeX, not a hook into your CSS, so they belong in the standard.
+- A symbol like `:smile:` renders literally, as `:smile:`. That is djot's
+  default, and today's renderer gets it wrong by dropping the colons.
+- Raw `=html` blocks go through `element.unsafe_raw_html`, the way they do
+  today.
+
+Leave `Inline.Footnote` and `Block.Footnotes` as stubs (`h.text("")`) for now,
+which is today's behaviour (a footnote currently vanishes). Step 5 is where
+they change. The type already carries the real fields either way, since
+`document` from step 1 has to produce them; only the markup is deferred.
+
+Keep the old `to_attributes` exactly as it is. It folds the dict in a particular
+order, and a new order would flood the diff with attribute reshuffles.
+
+Nothing uses these modules yet, so there is nothing to diff. `gleam build` is the
+check.
+
+**Step 3: the browser.**
+
+Replace `styled_renderer` in `src/site.gleam` with `browser()` and point
+`render` at `render.document(doc) |> render.render(browser(), _)` (or
+equivalent):
+
+```gleam
+pub fn browser() -> render.Renderer {
+  render.Renderer(
+    block: fn(node, ctx) {
+      case node {
+        render.Codeblock(a, language, source) -> highlighted(a, language, source)
+        render.BulletList(..) | render.OrderedList(..) -> styled_list(node, ctx)
+        _ -> djot_html.block(node, ctx)
+      }
+    },
+    inline: fn(node, ctx) {
+      case node {
+        render.Image(..) -> figure(node, ctx)
+        _ -> djot_html.inline(node, ctx)
+      }
+    },
+  )
+}
+```
+
+`highlighted` is the body of today's `codeblock` override. Lowercase the language
+first, once, and that is the third bug gone. `styled_list` keeps the inline
+`list-style-type` and `data-punctuation` the page has today, for both kinds of
+list. `figure` is today's image override. Its `url` is already resolved by the
+time it runs, since step 1 folded the destination into a plain `String` before
+any renderer existed, so `figure` only has to pattern-match
+`render.Image(attributes, content, url)` and build the `<figure>`. There is no
+`jot.Url` to destructure and no case to make for a `Reference` that cannot
+appear.
+
+Math, symbols and the inline formatting fall through to the standard rendering.
+Symbols are the one place the browser's output changes in principle, gaining
+their colons back, but no page uses one, so the diff stays quiet.
+
+`render_minimal` stays on the old `djot.default_renderer()` for one more step.
+
+**Step 4: the feed.**
+
+```gleam
+pub fn feed(page: uri.Uri) -> render.Renderer {
+  render.Renderer(
+    block: fn(node, ctx) { djot_html.block(strip_block(node), ctx) },
+    inline: fn(node, ctx) {
+      djot_html.inline(node |> absolutize(page) |> strip_inline, ctx)
+    },
+  )
+}
+```
+
+`strip_block` empties the attributes of `Paragraph`, `Heading`, `Codeblock`,
+`BlockQuote` and `Div`. `strip_inline` does the same for `Link`, `Image` and
+`Span`. `absolutize` has a smaller job than it would have had before step 1
+started resolving destinations itself: a `Link` or `Image` reaching `feed`'s
+`inline` callback already carries a plain `url: String`, reference attributes
+already merged in, so `absolutize` only rewrites that string against the page
+and puts it back, no destination type involved at all:
+
+```gleam
+fn absolutize(node: render.Inline, page: uri.Uri) -> render.Inline {
+  case node {
+    render.Link(attributes:, content:, url:) ->
+      render.Link(attributes:, content:, url: absolute(url, page))
+    render.Image(attributes:, content:, url:) ->
+      render.Image(attributes:, content:, url: absolute(url, page))
+    _ -> node
+  }
+}
+
+fn absolute(url: String, page: uri.Uri) -> String {
+  {
+    use parsed <- result.try(uri.parse(url))
+    use merged <- result.try(uri.merge(page, parsed))
+    Ok(uri.to_string(merged))
+  }
+  |> result.unwrap(url)
+}
+```
+
+Merge against the page, not the site base. RFC 3986 then handles every case with
+no special code, `/contact/` resolves against the host, `#frag` becomes the
+page's own URL plus the fragment, and `https://` or `mailto:` come back
+unchanged — with one exception `gleam_stdlib` does not get right. `uri.merge`'s
+`remove_dot_segments` (`gleam/uri.gleam:605-626`) treats every empty path
+segment as a dot-segment to discard, the same as `"."`, instead of only
+discarding `"."` and `".."`. A trailing slash on an absolute-path reference
+splits into a trailing empty segment, so `/contact/` merges down to `/contact`,
+regardless of what the base path looks like. Restore it by hand:
+
+```gleam
+let path = case
+  string.ends_with(parsed.path, "/") && !string.ends_with(merged.path, "/")
+{
+  True -> merged.path <> "/"
+  False -> merged.path
+}
+Ok(uri.to_string(uri.Uri(..merged, path:)))
+```
+
+This is where chapter 2's trailing-slash detour pays off regardless: `route.Abs`
+stores the path without the slash and adds it in `abs_string`, so merging
+against the stored URI would resolve `img.png` on `/posts/foo/` into
+`/posts/img.png`. Add `route.abs_uri(abs) -> uri.Uri` returning the canonical
+form, rewrite `abs_string` as `abs_uri` piped into `uri.to_string`, and pass
+`abs_uri` of `site.abs_path(page, base)` to `feed`. That means
+`to_minimal_elements` hands the page to `render_minimal` rather than only its
+body.
+
+With both outputs on the new modules, delete `src/djot.gleam` and
+`src/render.gleam`. `gleam build` should be warning-clean.
+
+**Step 5: footnotes.**
+
+Replace the two stub arms left in step 2. `Inline.Footnote(label:, ref_id:,
+note_id:)` renders `<sup><a id={ref_id} href="#{note_id}">{label}</a></sup>`.
+`Block.Footnotes(entries:)` renders `<section role="doc-endnotes">` with an
+`<ol>`; each `<li id={entry.note_id}>` holds `{entry.label}: ` followed by the
+footnote's blocks rendered through `render.blocks`, which means through the
+current renderer. When `doc.footnotes` was empty, step 1 never appended a
+`Footnotes` block at all, so there is nothing here to special-case for that.
+
+`label` is the footnote's own key, sorted alphabetically for entry order, since
+nothing upstream tracks order of first reference the way jot's own HTML output
+does by threading state through every call
+(`build/packages/jot/src/jot.gleam:2861`). The cost is that writing `[^b]`
+before `[^a]` on one page orders them the other way around. There is one
+footnote on the whole site. If you want numbered footnotes instead of named
+ones, or if the ordering ever bites, change `label` where step 1 builds the
+`anchors` dict; neither `Inline.Footnote` nor `Block.Footnotes` has to change,
+because both only ever read whatever `label` is in effect.
 
 ### Check it
 
-This is the chapter most likely to produce diff noise, and that is the point of
-having a golden copy. Work through every difference until each one is either
-intended or gone.
+After step 3 (the browser):
 
-Expect: `class="info info"` becomes `class="info"`, the footnote appears, and the
-`lustre:fragment` comments disappear if you build flat element lists instead of
-calling `element.fragment`.
+```sh
+just build && diff -r /tmp/golden priv
+```
+
+Ten callouts lose their doubled class, across the two posts and `/uses/`:
+`class="info info"`, `"tip tip"` and `"note note"` each become a single class.
+Every other page is byte-identical. Any other difference means the port is not
+faithful, so look at attribute order first.
+
+After step 4 (the feed), `feed.xml` changes and nothing else does. Every `href`
+and `src` in the entries starts with `https://kevinschweikert.de/`, trailing
+slashes included — check `/contact/` specifically, since that is the one the
+`uri.merge` workaround exists for. The `class`, `style` and `data-*` attributes
+are gone. Code blocks are a bare `<pre><code>`, and images are a bare `<img>`,
+without the browser's `<figure>`.
+
+```sh
+rg -c 'href=&quot;/|src=&quot;/' priv/feed.xml   # nothing
+rg -o 'contact[^&"]*' priv/feed.xml              # contact/, not contact
+```
+
+After step 5 (footnotes), `/uses/` gains the footnote marker and an endnotes
+section saying what KVM stands for. Nothing else changes, because it is the
+only footnote and pages are not in the feed.
+
+The `lustre:fragment` comments stay. They come from `common()` in
+`src/site.gleam`, not from the djot rendering.
 
 ---
 
@@ -859,9 +1306,10 @@ Build the Home Assistant post and count the code block shapes:
  3  <pre><code data-lang="text">                               raw text, no spans
 ```
 
-glimra has no `iex` grammar, so `result.unwrap` at `src/page.gleam:281` quietly
-substitutes a different DOM shape. The two shapes are not cosmetically different,
-they are structurally different, and the CSS treats them differently as a result.
+glimra has no `iex` grammar, so the `result.unwrap` in the browser's
+`highlighted`, from chapter 6, quietly substitutes a different DOM shape. The two
+shapes are not cosmetically different, they are structurally different, and the
+CSS treats them differently as a result.
 
 `assets/app.css:181` sets `.line { display: block }` with a synthesized
 `::after { content: "\A" }`, because glimra strips newline characters entirely
@@ -898,7 +1346,7 @@ Decide what to do about the badge. Keeping it is defensible, since knowing a
 block is `iex` is useful whether or not it is coloured. The current state, where
 `text` is suppressed and `iex` is not, is the part that reads as an accident.
 
-While you are here: `src/page.gleam:279` passes
+While you are here: `highlighted` passes
 `set_theme(theme.default_theme())`, and those colours never render. `glimra.to_css`
 is never called, `assets/app.css:210-437` hand-writes the entire token class list
 against the Catppuccin variables, and `syntax_highlight` is generic over
@@ -1130,7 +1578,7 @@ Walk the final diff one last time. Every difference should be a fix you can name
 | `build.gleam` | `blog.gleam`, the pipeline |
 | `page.gleam` | split: `content.gleam`, `site.gleam`, `view/article.gleam` |
 | `index.gleam` | `view/home.gleam`, returning a `Computed` body |
-| `djot.gleam` | `djot/render.gleam`, two fields instead of 22 |
+| `djot.gleam` | `djot/render.gleam`, a two-field visitor, plus `djot/html.gleam`, the standard rendering |
 | `render.gleam` | deleted, it was dead |
 | `helper.gleam` | `view/components.gleam`, or a `date` module |
 | `component.gleam` | `view/components.gleam`, XML bits move to the generators |
@@ -1225,8 +1673,7 @@ the site uses rather than sharing them.
 Returning an HTML `String` rather than a Lustre `Element` stays right for a
 general package, since it keeps lustre out of the dependency tree.
 `element.unsafe_raw_html` embeds a string without parsing it, so the cost is nil
-and chapter 6's `code: fn(Option(String), String) -> element.Element(Nil)`
-absorbs it unchanged.
+and chapter 6's `highlighted` absorbs it unchanged.
 
 Three caveats survive. Lumis is at 0.10.2 and pre-1.0, published days ago and
 recently renamed from `autumn`, so expect movement. Every language is its own hex
@@ -1241,3 +1688,60 @@ Chapter 6 puts the highlighter behind a single function, so when you do decide,
 it is a small change rather than a large one. If the Gleam package lands in the
 meantime, that function becomes a direct call instead of an FFI wrapper, and
 nothing else in the book changes.
+
+---
+
+## Two ideas for after the book, not during it
+
+Both came up while chapter 6 was fresh, both touch the same resolve/render
+split that chapter just finished, and neither should be designed until the
+rest of the chapters are. Revisit once chapters 7 through 10 are done, since
+chapter 8's `Output`/`Target` set and chapter 9's validator are exactly the
+things either idea would plug into.
+
+**Local image paths that work in a markdown previewer.** The want: write
+`![](../images/foo.jpg)` in a djot source file, have a local markdown viewer
+resolve it as a plain relative path, and have the build copy the file into its
+output location and rewrite the URL to the site path. The image case is the
+easier of the two, because a URL is still a URL: `jot.Image`'s destination can
+be rewritten in place, as a pre-pass over the parsed `jot.Document` that runs
+before `render.document` ever sees it, so `djot/render` never has to know
+images can come from disk.
+
+The one trap worth remembering by the time this gets built: the pre-pass
+produces two facts about the same file, the rewritten URL and the `Output`
+that copies it, and those must come from one function, not two. Build both
+from the same underlying `route.Rel` value in a single call
+(`resolve_local_image(src_path, dest) -> #(String, output.Output)`) rather
+than computing a URL string in one place and an `Output.path` in another.
+That is the same bug chapter 6 hit with the footnote ref/entry ids agreeing by
+luck instead of by construction, wearing a different hat.
+
+**Executable code blocks**, marked somehow in the djot source, run at build
+time, with their result spliced in below the block. This one is not a small
+extension of the image idea, because of a constraint chapter 4 already argued
+for at length: rendering must stay a pure function from a value to markup.
+`render.render(doc, renderer)` currently resolves the document fresh on every
+call, and `site.gleam` calls it twice per page, once for the browser and once
+for the feed. References and footnotes tolerate that because resolving them
+twice gives the same answer both times with no side effects. Running a code
+block twice does not: it is slow, and if the code is not perfectly
+deterministic, the browser and the feed could end up showing different output
+for the same block. That is the `git_hash`-inside-`common()` bug from chapter
+4, recurring for something far more expensive than a shell call.
+
+So this one pushes further than the image idea does: `render.document` (resolve,
+run once) and `render.blocks` (dispatch, run once per output) would need to be
+called separately from `site.gleam`, with the same resolved `List(Container)`
+handed to both a browser `Context` and a feed `Context`, rather than letting
+`render.render` do both steps together on every call. And because a captured
+result is a fact `jot.Codeblock` has no field for, it cannot be smuggled in as
+a `jot.Document` rewrite the way an image URL can; it has to become a new
+field on `render.gleam`'s own `Codeblock`, populated during `document`'s
+resolve walk.
+
+Neither idea is designed yet. Before building either: decide whether the
+image pre-pass's `Output`s get folded into whatever chapter 8 ends up calling
+the site's full output set, and decide how execution results get cached so an
+unrelated build does not re-run every executable block, and what renders when
+one fails.

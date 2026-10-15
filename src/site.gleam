@@ -1,7 +1,8 @@
 import component
 import config.{type Config}
 import content.{Revision}
-import djot
+import djot/html as djot_html
+import djot/render
 import filepath
 import frontmatter
 import gleam/dict
@@ -12,7 +13,6 @@ import gleam/string
 import gleam/time/calendar
 import gleam/uri
 import glimra
-import glimra/theme
 import jot
 import lustre/attribute
 import lustre/element
@@ -156,7 +156,7 @@ fn common(page: Page, config: Config) {
 
 pub fn to_elements(page: Page, site: Site) -> List(element.Element(Nil)) {
   common(page, site.config)
-  |> list.append(render(page.body, site))
+  |> list.append(render(page, site))
 }
 
 pub fn to_minimal_elements(
@@ -164,55 +164,108 @@ pub fn to_minimal_elements(
   site: Site,
 ) -> List(element.Element(Nil)) {
   common(page, site.config)
-  |> list.append(render_minimal(page.body, site))
+  |> list.append(render_minimal(page, site))
 }
 
-fn render(body: Body, site: Site) -> List(element.Element(Nil)) {
-  case body {
-    Djot(document) -> djot.render(document, styled_renderer())
+fn render(page: Page, site: Site) -> List(element.Element(Nil)) {
+  case page.body {
+    Djot(document) -> render.render(document, browser())
     Computed(view) -> view(site)
   }
 }
 
-fn render_minimal(body: Body, site: Site) -> List(element.Element(Nil)) {
-  case body {
-    Djot(document) -> djot.render(document, djot.default_renderer())
+fn render_minimal(page: Page, site: Site) -> List(element.Element(Nil)) {
+  let page_uri =
+    route.of(page.route) |> route.abs(on: site.config.base) |> route.abs_uri()
+  case page.body {
+    Djot(document) -> render.render(document, feed(page_uri))
     Computed(view) -> view(site)
   }
 }
 
-fn styled_renderer() -> djot.Renderer(element.Element(Nil)) {
-  let to_attributes = fn(attrs) {
-    use attrs, key, val <- dict.fold(attrs, [])
-    [attribute.attribute(key, val), ..attrs]
-  }
-
-  djot.Renderer(
-    ..djot.default_renderer(),
-    codeblock: fn(attrs, language, source) {
-      let language = option.unwrap(language, "text")
-
-      html.pre(to_attributes(attrs), [
-        glimra.new_syntax_highlighter()
-        |> glimra.set_theme(theme.default_theme())
-        |> glimra.syntax_highlight(source:, language:)
-        |> result.unwrap(
-          html.code([attribute.attribute("data-lang", language)], [
-            element.text(source),
-          ]),
-        ),
-      ])
+fn browser() -> render.Renderer {
+  render.Renderer(
+    container: fn(node, ctx) {
+      case node {
+        render.Codeblock(attributes:, language:, content:) ->
+          highlight(attributes, language, content)
+        _ -> djot_html.container(node, ctx)
+      }
     },
-    image: fn(destination, attributes, alt) {
-      let attributes = to_attributes(attributes)
-      case destination {
-        option.None -> html.span(attributes, [html.text(alt)])
-        option.Some(url) ->
-          html.figure([], [
-            html.img([attribute.src(url), attribute.alt(alt), ..attributes]),
-            html.figcaption([], [html.text(alt)]),
-          ])
+    inline: fn(node, ctx) {
+      case node {
+        render.Image(attributes:, content:, url:) ->
+          figure(attributes, content, url)
+        _ -> djot_html.inline(node, ctx)
       }
     },
   )
+}
+
+fn feed(page: uri.Uri) -> render.Renderer {
+  render.Renderer(container: djot_html.container, inline: fn(node, ctx) {
+    node
+    |> absolutize(page)
+    |> djot_html.inline(ctx)
+  })
+}
+
+fn absolutize(node: render.Inline, page: uri.Uri) -> render.Inline {
+  case node {
+    render.Link(attributes:, content:, url:) -> {
+      let absolute = url |> absolute(page)
+      render.Link(attributes:, content:, url: absolute)
+    }
+    render.Image(attributes:, content:, url:) -> {
+      let absolute = url |> absolute(page)
+      render.Image(attributes:, content:, url: absolute)
+    }
+    _ -> node
+  }
+}
+
+// uri.merge discards a trailing slash but our canonical representation wants it
+fn absolute(url: String, page: uri.Uri) -> String {
+  {
+    use parsed <- result.try(uri.parse(url))
+    use merged <- result.try(uri.merge(page, parsed))
+    let path = case
+      string.ends_with(parsed.path, "/") && !string.ends_with(merged.path, "/")
+    {
+      True -> merged.path <> "/"
+      _ -> merged.path
+    }
+
+    Ok(uri.to_string(uri.Uri(..merged, path:)))
+  }
+  |> result.unwrap(url)
+}
+
+fn figure(
+  attributes: dict.Dict(String, String),
+  content: List(render.Inline),
+  url: String,
+) -> element.Element(Nil) {
+  let alt = djot_html.text_content(content)
+  let attributes = djot_html.to_attributes(attributes)
+  html.figure([], [
+    html.img([attribute.src(url), attribute.alt(alt), ..attributes]),
+    html.figcaption([], [html.text(alt)]),
+  ])
+}
+
+fn highlight(
+  attributes: dict.Dict(String, String),
+  language: String,
+  source: String,
+) -> element.Element(Nil) {
+  html.pre(djot_html.to_attributes(attributes), [
+    glimra.new_syntax_highlighter()
+    |> glimra.syntax_highlight(source:, language:)
+    |> result.unwrap(
+      html.code([attribute.attribute("data-lang", language)], [
+        element.text(source),
+      ]),
+    ),
+  ])
 }
