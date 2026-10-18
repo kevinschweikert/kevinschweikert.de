@@ -6,6 +6,7 @@ import djot/render
 import filepath
 import frontmatter
 import gleam/dict
+import gleam/io
 import gleam/list
 import gleam/option
 import gleam/result
@@ -260,12 +261,24 @@ fn highlight(
   source: String,
 ) -> element.Element(Nil) {
   html.pre(djot_html.to_attributes(attributes), [
-    glimra.new_syntax_highlighter()
-    |> glimra.syntax_highlight(source:, language:)
-    |> result.unwrap(
-      html.code([attribute.attribute("data-lang", language)], [
-        element.text(source),
-      ]),
-    ),
+    case
+      glimra.new_syntax_highlighter()
+      |> glimra.syntax_highlight(source:, language:)
+    {
+      Ok(element) -> element
+      Error(err) ->
+        case err {
+          glimra.UnsupportedLanguage(language:) -> {
+            io.println_error("language " <> language <> " not supported")
+            html.code([attribute.attribute("data-lang", language)], {
+              let lines = source |> string.trim |> string.split("\n")
+              use line <- list.map(lines)
+              html.span([attribute.class("line")], [html.text(line)])
+            })
+          }
+          glimra.TreeSitterError -> panic
+          glimra.UnmatchedHighlightEvents -> panic
+        }
+    },
   ])
 }
