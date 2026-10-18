@@ -1,6 +1,6 @@
 # Rebuilding the generator
 
-A step by step rewrite of this site's static site generator, in eleven chapters.
+A step by step rewrite of this site's static site generator, in fourteen chapters.
 
 ## How to use this
 
@@ -144,7 +144,7 @@ Writing to disk collapses to one function. Right now four places know about the
 filesystem.
 
 And the set of paths the build emits becomes a value you can hand to something
-else. That turns out to be exactly what link checking needs in chapter 9, which
+else. That turns out to be exactly what link checking needs in chapter 12, which
 is why that feature has had nowhere to live.
 
 ### The work
@@ -294,9 +294,9 @@ belongs to, and the derivation stops being an outlier bolted to the side.
 Variants rather than functions, and the reason is worth stating. A `route.feed()`
 returning a `Rel` would spell the URL once, which is most of the win, but it
 hands back a value nothing can enumerate. A variant is a member of a set you can
-list, and listing that set is what chapter 8's `Targets` and chapter 9's
+list, and listing that set is what chapter 8's `Targets` and chapter 12's
 validator are for. The header links to `/feed.xml` from every page on the site,
-so chapter 9 has to know that URL is real. `Target` tells it, and tells it about
+so chapter 12 has to know that URL is real. `Target` tells it, and tells it about
 the OG images too, which a function on `Route` would have left outside the set.
 
 ### The work
@@ -390,7 +390,7 @@ Change `html.meta` to `html.link` on line 20 while you are in the file. One word
 and it is the difference between having canonical tags and not.
 
 Two links in content point at the non-canonical form. Fix them here, because
-chapter 9 will reject them and you would rather meet them now than as a wall of
+chapter 12 will reject them and you would rather meet them now than as a wall of
 validator output later:
 
 - `posts/build-home-assistant-devices-with-elixir-and-nerves.dj:485` links to
@@ -668,7 +668,7 @@ time just build
 
 The build currently takes about a second, most of it process spawning. Expect
 that to drop. More importantly, rendering is now a pure function, which is what
-makes chapter 10's tests possible.
+makes chapter 13's tests possible.
 
 The diff should be clean apart from the feed timestamp. Two unchanging facts
 computed once instead of six times are still the same two facts.
@@ -720,7 +720,7 @@ between a fix and a refactor.
 Notice also that `Djot` holds a parsed `jot.Document`, not a raw string. Today
 `page.render` and `page.render_minimal` each call `jot.parse` on the same text,
 so every post is parsed twice. Parsing at discovery means it happens once, and it
-means the link checker in chapter 9 reads exactly the same tree the renderer
+means the link checker in chapter 12 reads exactly the same tree the renderer
 does, rather than a second parse that might drift.
 
 ### The work
@@ -1023,7 +1023,7 @@ sees that a reference was involved. No document uses that today, and it stays
 supported anyway: the standard rendering supports the whole of djot, not just
 the parts this site happens to use, so a post you write next year can use any
 of it without a trip back into the renderer. If a key is not found, that is
-exactly what chapter 9's validator exists to catch before this code ever runs;
+exactly what chapter 12's validator exists to catch before this code ever runs;
 leave the `url` as the original reference text in that case rather than
 crashing, so a document with no validator in front of it yet still renders
 instead of halting the build.
@@ -1405,7 +1405,7 @@ you were after, and notice it did not require a plugin system or a registry of
 hooks. It required one type.
 
 `targets` is computable before any rendering happens, which is the detail that
-makes chapter 9 work. Chapter 2 did most of this for you: `route.Target`
+makes chapter 12 work. Chapter 2 did most of this for you: `route.Target`
 enumerates everything the build emits a URL for, so `targets` is
 
 ```gleam
@@ -1419,7 +1419,7 @@ enumerates everything the build emits a URL for, so `targets` is
 ```
 
 and the only thing it needs beyond the type is the walk over `assets/`. Note that
-OG images are in the set rather than beside it, which is what lets chapter 9
+OG images are in the set rather than beside it, which is what lets chapter 12
 check a link to one. So you can validate every link before you render a single
 element.
 
@@ -1446,7 +1446,479 @@ depends on directory iteration order somewhere.
 
 ---
 
-## Chapter 9: Links that cannot rot
+## Chapter 9: The document model
+
+### The problem
+
+Every post is resolved twice per build. `render` at `src/site.gleam:160` and
+`render_minimal` at `:167` each call `render.render`, and `render.render` at
+`src/djot/render.gleam:102` runs `document` before it dispatches. So references
+and footnotes are worked out once for the page and again for the feed. That is
+cheap today. It is also exactly what the executable code block idea at the end of
+this book trips over.
+
+The resolved tree has no name. `render.document` returns `List(Container)`, a bare
+list, and the only thing anything does with it is hand it to a `Renderer`. There
+is nowhere to ask "which headings does this post have" or "which languages do its
+code fences use", and chapter 12's link checker needs both answers.
+
+And the feed's one real difference from the page, absolute URLs, is written as a
+renderer, `feed` at `src/site.gleam:195`, even though it changes no markup. It
+rewrites a URL and then hands the node to the standard rendering. That is a change
+to the content dressed up as a change to the output.
+
+### The idea
+
+unified, the engine behind remark and rehype, splits document processing into
+three phases: parse into a tree, run plugins over the tree, stringify. Hugo arrived
+at the same split from the other side. Render hooks answer "this element should
+look different", and `.Fragments` and `.TableOfContents` answer "tell me about
+this page". Your version is three kinds of pass over one tree:
+
+| Kind | Shape | Use it when |
+| --- | --- | --- |
+| Extract | `fn(Document) -> a` | you want a fact: headings, links, code languages, plain text |
+| Transform | `fn(Document) -> Document` | same node types, different data: absolute URLs, resolved refs |
+| Render override | a `Renderer` case | same data, different markup: `<figure>`, highlighted code |
+
+The tree is parsed once, when the file is read, and stored on the page. Extracts
+and transforms are pure, so they can run as often as anyone likes. Renderers stay
+what chapter 6 made them.
+
+What makes passes cheap to write is traversal written once. Chapter 12 would
+otherwise have to know that footnote bodies are not reachable from the main
+content, and that an image can sit inside a link's content. Those are traversal
+facts. Solve them in one place and every pass matches only the nodes it cares
+about.
+
+One rule keeps the module honest: nothing under `src/djot/` imports `site`,
+`route`, `path` or `config`. URLs are `String`s in the tree. Deciding whether a
+link is internal is the checker's job, and keeping the site out of the tree is
+what would let you lift `djot/` into its own package one day.
+
+### The work
+
+Split `src/djot/render.gleam`:
+
+```
+djot/document.gleam   Document, Block, Inline, map and fold
+djot/parse.gleam      text -> Document (today's render.document and its helpers)
+djot/extract.gleam    headings, links, code_languages, text
+djot/transform.gleam  absolutize
+djot/html.gleam       Renderer, render, the standard rendering
+```
+
+Rename `Container` to `Block` on the way, so the two node families read as a pair.
+`Endnotes` stays a block, which is what makes footnote bodies part of the normal
+traversal rather than a special case.
+
+```gleam
+// src/djot/document.gleam
+
+pub type Document {
+  Document(blocks: List(Block))
+}
+
+/// Bottom-up: `f` sees each node after its children were mapped.
+pub fn map_inlines(doc: Document, f: fn(Inline) -> Inline) -> Document
+pub fn map_blocks(doc: Document, f: fn(Block) -> Block) -> Document
+
+/// Pre-order over every node, including footnote bodies and inlines nested
+/// inside link content.
+pub fn fold_inlines(doc: Document, from acc: a, with f: fn(a, Inline) -> a) -> a
+pub fn fold_blocks(doc: Document, from acc: a, with f: fn(a, Block) -> a) -> a
+```
+
+A record with one field looks like ceremony. It is there for the name. `Document`
+is what a page holds, what passes take and what renderers render, and a bare
+`List(Block)` says none of that.
+
+`parse.parse(text) -> Document` is the only caller of `jot.parse` and the only
+module that imports `jot`. `site.parse` calls it, so `Body`'s `Djot` variant holds
+a `document.Document`, parsed once. `html.render(doc, renderer)` stops resolving
+anything. It walks the blocks it is handed.
+
+Then the feed's renderer becomes a transform:
+
+```gleam
+// src/djot/transform.gleam
+
+pub fn absolutize(doc: Document, against page: uri.Uri) -> Document {
+  use node <- document.map_inlines(doc)
+  case node {
+    Link(..) -> Link(..node, url: absolute(node.url, page))
+    Image(..) -> Image(..node, url: absolute(node.url, page))
+    _ -> node
+  }
+}
+```
+
+`absolute` moves with it, trailing slash workaround and all. `render_minimal`
+becomes `doc |> transform.absolutize(against: page_uri) |> html.render(djot_html.renderer())`,
+and `site.feed` is deleted.
+
+Write the extracts now, even though only chapter 12 calls most of them. Each is a
+few lines over a fold, and they are how you find out whether the folds are right:
+
+- `headings(doc) -> List(Heading)`, with `Heading(id:, level:, text:)`. The `id` is
+  the attribute jot assigns to every heading (`build/packages/jot/src/jot.gleam:1173`).
+- `links(doc) -> List(String)`, every `Link` and `Image` URL.
+- `code_languages(doc) -> Set(String)`.
+- `text(inlines) -> String`, today's `djot_html.text_content`, moved here because
+  it is a fact about the tree, not markup. `figure` keeps using it for alt text.
+
+### Check it
+
+```sh
+just build && diff -r /tmp/golden priv
+```
+
+Clean apart from the feed timestamp. Nothing renders differently: the same tree is
+resolved once instead of twice, and the feed's URL rewrite happens before
+rendering instead of during it.
+
+```sh
+rg -n '^import jot' src/                          # only djot/parse.gleam
+rg -n '^import (site|route|path|config)' src/djot # nothing
+```
+
+---
+
+## Chapter 10: Pages have kinds
+
+### The problem
+
+Ask the code what kinds of page the site has and you get two answers that have to
+agree. `route.Route` at `src/route.gleam:11` says Home, Standalone and Article.
+`site.Page` at `src/site.gleam:28` is one record for all three, so the kind lives
+in `page.route`, and everything that cares has to ask the route.
+`src/generate/feed.gleam:44` and `src/home.gleam:18` both match on
+`page.route` to recover the information the flat list threw away.
+
+The flat record also makes every page carry what only some pages have.
+`published` is required, so Home gets `calendar.Date(2026, calendar.January, 18)`
+typed into `src/build.gleam:111`. The five pages in `pages/` carry
+`published = 2026-01-18` in their frontmatter, a date that means nothing on
+`/uses/`. `source` is an `Option` because Home has no file, so every authored page,
+which certainly has one, is still read through `option.Some`. And
+`Computed(fn(Site) -> ...)` puts a function over the site inside a page inside the
+site. You cannot compare two pages, `echo` one, or match on what a computed page
+is.
+
+The address types repeat the same problem on a smaller scale. There are five
+names: `Route`, `Target`, `Rel`, `Abs`, and the private `Kind`. `Kind` says kind
+but means "directory or file", which has nothing to do with what kind of page
+something is. `Target` exists so chapter 8 could list everything the build writes
+before writing it, in `paths` at `src/build.gleam:39`. That is a second list that
+has to agree with the generators. Add a generator, forget `paths`, and chapter 12
+would reject links to files that exist.
+
+Finally, `site.gleam` does three jobs: it is the model, it parses files (`parse`
+and `extract_meta`, `:51-79`), and it renders (`common` through `highlight`,
+`:107-273`, over half the file).
+
+### The idea
+
+A page has a kind, and its kind decides what it holds and where it lives. Hugo
+models exactly this with `.Kind`: home, page, section, taxonomy, term. In Gleam
+the kind is the variant:
+
+```gleam
+pub type Page {
+  Home
+  Article(content: Content, published: calendar.Date)
+  Standalone(content: Content)
+}
+
+/// Everything that came from one source file.
+pub type Content {
+  Content(slug: String, meta: Meta, source: Source, document: Document)
+}
+```
+
+Read what the types now say. Only articles have a publication date, which is how
+Jekyll, Zola and Astro all do it: dated posts, undated pages. Authored content
+always has a `Source`, so the `Option` is gone. Home holds nothing, because
+nothing about it is authored. Its title and description come from config, and
+its body is a view over the other pages, so the `Computed` closure becomes an
+ordinary `case` arm. `Content` is the word Hugo, Zola and Astro use for authored
+material. It holds a little more than the word suggests, the slug and the file,
+but it holds exactly what came from one source file and nothing that did not.
+
+Fields that belong to one kind go on that kind's variant, not on `Content`. That
+is the same move as Astro's per-collection schemas. `published` already lives on
+`Article`. When articles get tags, `tags` goes there too.
+
+The URL is a function of the page:
+
+```gleam
+pub fn path(page: Page) -> Path {
+  case page {
+    Home -> path.directory([])
+    Article(content:, ..) -> path.directory(["posts", content.slug])
+    Standalone(content:) -> path.directory([content.slug])
+  }
+}
+```
+
+That leaves one address type, `Path`, the address of anything the build writes.
+Directory versus file is hidden inside it as its two private variants. Absolute
+URLs are plain `uri.Uri` values from `path.url`. `Route` goes because `Page` is the
+kind now. `Target` goes because chapter 12 takes the list of what exists from the
+outputs themselves. `Abs` goes because it had one producer and every consumer
+unwrapped it straight away.
+
+`Route` did one job that still needs doing: linking to a page you are not holding.
+The layout's nav and footer look pages up by slug, and the build fails if one is
+missing. That is stricter than before, since `Standalone("abuot")` type-checked
+fine. Links written in djot are chapter 12's job.
+
+The generators stay exactly as they are. They are the extension point.
+
+### The work
+
+`src/path.gleam` replaces `src/route.gleam`:
+
+```gleam
+pub opaque type Path {
+  Directory(segments: List(String))
+  File(segments: List(String))
+}
+
+pub fn directory(segments: List(String)) -> Path
+pub fn file(segments: List(String)) -> Path
+pub fn feed() -> Path                   // /feed.xml
+pub fn sitemap() -> Path                // /sitemap.xml
+pub fn card(for page: Path) -> Path     // /images/og/posts/foo.png, /images/og/index.png
+pub fn href(path: Path) -> String       // "/posts/foo/", "/feed.xml"
+pub fn url(path: Path, on base: uri.Uri) -> uri.Uri
+pub fn on_disk(path: Path) -> String    // "posts/foo/index.html"
+```
+
+Segments, not strings, so the four `let assert`s in `rel_page` and `rel_file` have
+nothing left to check. `url` keeps the trailing slash, the way `abs_uri` does
+today, so canonical tags and `transform.absolutize` use it directly. Assets keep
+their relative path, split into segments, as a `path.file`.
+
+`src/site.gleam` becomes the model and nothing else. `content.gleam` folds into it:
+
+```gleam
+pub type Site {
+  Site(config: Config, pages: List(Page), assets: List(Asset))
+}
+
+pub type Meta { Meta(title: String, description: String) }
+pub type Source { Source(path: String, revision: Option(Revision)) }
+pub type Revision { Revision(hash: String, changed_at: calendar.Date) }
+pub type Asset { Asset(from: String, path: Path) }
+
+pub fn path(page: Page) -> Path
+pub fn meta(config: Config, page: Page) -> Meta          // Home's comes from config
+pub fn updated(site: Site, page: Page) -> Option(calendar.Date)
+pub fn standalone(site: Site, slug: String) -> Result(Page, Nil)
+```
+
+`updated` reads the git revision for authored pages. For Home it is the newest
+article's date, because the home page changes when a post is added, not when
+`home.gleam` does.
+
+There is deliberately no `articles(site)` query. Gleam cannot return "only the
+`Article` variant" as a type without a second record, and the two consumers each
+build their own projection anyway. So the feed and home each filter and sort:
+
+```gleam
+use page <- list.filter_map(site.pages)
+case page {
+  site.Article(content:, published:) -> Ok(#(published, entry(site, page, content)))
+  _ -> Error(Nil)
+}
+```
+
+Rendering moves out of `site.gleam` into `src/view/`:
+
+```
+view/page.gleam        render(site, page): picks the body, wraps it in the layout
+view/layout.gleam      today's layout.gleam
+view/home.gleam        today's home.gleam
+view/content.gleam     header and body of an authored page (today's common and render)
+view/prose.gleam       the browser Renderer: highlight, figure
+view/components.gleam  today's component.gleam and the date functions from helper.gleam
+```
+
+```gleam
+// src/view/page.gleam
+
+pub fn render(site: Site, page: Page) -> Element(Nil) {
+  let body = case page {
+    site.Home -> home.view(site)
+    site.Article(content:, published:) -> content.article(site.config, content, published)
+    site.Standalone(content:) -> content.standalone(site.config, content)
+  }
+  layout.root(site, page, body)
+}
+```
+
+The header follows the kinds. An article shows "Published on" plus the update and
+commit, a standalone page shows "Updated on" and the commit, and Home shows its
+title. `og:type` is a `case page` in the layout.
+
+Nav and footer links become lookups:
+
+```gleam
+fn nav_link(site: Site, slug: String, label: String) -> Element(Nil) {
+  let assert Ok(page) = site.standalone(site, slug)
+    as "the layout links to a page that does not exist"
+  html.a([attribute.href(page |> site.path |> path.href)], [html.text(label)])
+}
+```
+
+The feed renders `transform.absolutize(content.document, against: page |> site.path |> path.url(on: base))`.
+
+Reading stays in `build.gleam` for one more chapter, but it now builds kinds:
+`posts/` becomes `Article`, which requires `published`, and `pages/` becomes
+`Standalone`, which does not read it. Delete the `published` line from the five
+files in `pages/`. Home is `site.Home`, and the hand-typed date goes with it.
+
+`og_image.generate` passes `date` only for articles, and an empty string
+otherwise. `src/template.typ:18` prints it as text, so the line just stays blank.
+
+`paths` in `build.gleam` survives one more chapter as a `List(Path)`.
+
+### Check it
+
+```sh
+just build && diff -r /tmp/golden priv
+```
+
+Expect exactly these differences and no others:
+
+- `/` loses its "Published on January 18, 2026" line and its commit link.
+- The five standalone pages say "Updated on" with their git date instead of
+  "Published on".
+- In `sitemap.xml`, Home's `lastmod` becomes the newest article's date.
+- The cards for Home and the standalone pages lose their date line.
+
+```sh
+rg -n 'route\.' src/                # nothing
+rg -n 'calendar\.Date\(' src/       # nothing, the fake date is gone
+rg -n '^published' pages/           # nothing
+```
+
+---
+
+## Chapter 11: Discovery is a boundary
+
+### The problem
+
+Reading content is spread over two modules and fails by crashing. `build.gleam`
+lists directories, in `read_pages` at `:55` and `files` at `:49`. `site.parse`
+decodes frontmatter with four `let assert`s (`src/site.gleam:73-76`) and panics on
+an unknown extension (`:62`). A typo in one post's frontmatter crashes the build
+with a `let assert` pointing at `site.gleam`. It does not name the file, and if
+two files are broken you find out about one of them.
+
+Drafts are a folder, `./drafts` at `src/build.gleam:33`. Hugo, Zola and Eleventy
+all mark drafts with `draft = true` in frontmatter and include them with a build
+flag. Jekyll's `_drafts` folder is the exception. With a flag, publishing is a
+one-line change: the file does not move, its git history stays in one place, and
+its URL does not change at the moment you publish.
+
+And the generators take `paths` that none of them read, which is why every one of
+them names the argument `_paths`. `og_image.generate` is curried so it can
+receive its template, which makes it the one generator with a different shape.
+
+### The idea
+
+Chapter 4 applied "parse, don't validate" to git. This chapter applies it to every
+input. One module does all the reading and returns either a complete `Site` or
+every problem at once, each one naming its file:
+
+```gleam
+pub type Problem {
+  Problem(file: String, issue: Issue)
+}
+
+pub type Issue {
+  Unreadable(simplifile.FileError)
+  UnsupportedFormat(extension: String)
+  BadFrontmatter(reason: String)
+  MissingField(name: String)
+  InvalidSlug(slug: String)
+  DuplicatePath(path: String, other: String)
+}
+```
+
+Chapter 12 adds its link problems to the same type, so a single reporter prints
+everything the build has to say.
+
+Slugs are restricted to `[a-z0-9-]`. They become URLs and directory names, and
+checking them once means nothing downstream ever has to think about escaping.
+
+### The work
+
+```gleam
+// src/discover.gleam
+
+pub fn site(config: Config) -> Result(Site, List(Problem))
+```
+
+It reads `posts/` as articles, `pages/` as standalone pages, walks `assets/`,
+reads the card template, and resolves one git revision per file. Frontmatter is
+decoded per kind. Posts need `title`, `description` and `published`, with an
+optional `draft`. Pages need `title` and `description`. It reads every file before
+deciding anything, collects every problem, and returns `Error` if there are any.
+
+Two pages that land on the same `site.path` are a `DuplicatePath`. Today that
+would silently overwrite one output with the other. The easy way to hit it is
+`pages/uses.dj` next to `pages/uses.djot`.
+
+Drafts become `draft = true` in a post's frontmatter. `Config` gains
+`drafts: Bool`, set where `show_drafts` is computed today (`src/build.gleam:79`),
+and `discover` drops drafts when it is `False`. Whether drafts are shown is a
+decision about reading, not a fact about a page, so `Page` does not change. If you
+want a "draft" banner in development one day, that is a field on `Article`.
+Delete `drafts_path`.
+
+`Site` gains `card_template: String`, so `og_image.generate` loses its curried
+argument. Then `generate.Generator` becomes `fn(Site) -> List(Output)`, and
+`paths` in `build.gleam` is deleted. Chapter 12 gets that set from the outputs.
+
+`build.gleam` ends up as a pipeline with I/O at both ends:
+
+```gleam
+pub fn main() {
+  let config = read_config()   // SITE_URL and BLOG_ENV, as in chapter 3
+  case discover.site(config) {
+    Error(problems) -> problem.exit(problems)
+    Ok(site) ->
+      [pages.generate, assets.generate, sitemap.generate, feed.generate, og_image.generate]
+      |> list.flat_map(fn(generate) { generate(site) })
+      |> list.each(output.write(out_dir, _))
+  }
+}
+```
+
+`problem.exit` prints one line per problem, `posts/foo.dj: missing field "published"`,
+and exits non-zero through a one-line FFI to `erlang:halt/1`.
+
+### Check it
+
+```sh
+just build && diff -r /tmp/golden priv
+```
+
+Clean apart from the feed timestamp. Then break things on purpose:
+
+- Delete `title` from one post and `description` from another. Both are reported,
+  each with its file.
+- Copy `pages/uses.dj` to `pages/uses.djot`, and get a `DuplicatePath`.
+- Rename a post to `Foo Bar.dj`, and get an `InvalidSlug`.
+- Add `draft = true` to a post. `just build` leaves it out of the page, home, feed,
+  sitemap and cards. `just dev` puts it back.
+
+---
+
+## Chapter 12: Links that cannot rot
 
 ### The problem
 
@@ -1485,34 +1957,85 @@ every internal destination through `route` and rejects anything that does not
 already match, with the corrected spelling in the error. The server coping is not
 the same as the link being right.
 
+One more decision, and it replaces the `Target` set chapter 8 planned. The set of
+things a link may point at is the set of paths the build actually produces. So
+the build renders everything into memory, checks the links against the outputs'
+paths, and writes only if the check passes. Nothing reaches disk before then, so
+checking after rendering gives up no safety, and there is no second list that can
+drift from the generators. The cost is that the cards get rendered before a bad
+link stops the build. That is a few seconds. If it ever matters, make the card's
+contents lazy.
+
 ### The work
 
-A traversal and a check, in `src/djot/links.gleam`.
+Two pieces: typed references in `discover`, and a check in `src/check.gleam`.
 
-Four things about jot will bite you if you do not know them in advance.
+**Typed references.** Write `[the uses page][page:uses]` or
+`[that post][post:composable-sftp-streams]`. The two prefixes mirror the two
+authored kinds. jot does not know these keys, and `resolve_url` in `djot/parse`
+falls back to the key itself, so the link reaches the tree with `page:uses` as
+its URL. A transform fills it in:
 
-There is no fold or visitor helper, and no position information on any node. You
-hand-write the walk over all 9 `Container` and 16 `Inline` variants, and errors
-are reported by file and destination rather than line and column.
+```gleam
+pub fn resolve(doc: Document, table: Dict(String, String)) -> Document
+```
 
-`document.footnotes` is a separate `Dict(String, List(Container))` whose bodies
-are fully parsed blocks. They are not reachable from `document.content`, so the
-walk has to visit them separately or links inside footnotes go unchecked.
+The table is a plain `Dict(String, String)` from key to href, so `djot/` still
+knows nothing about the site. `discover` builds it from `site.path` of every page,
+which means reading becomes two passes: parse every file, then resolve every
+document against the table built from all of them. A key the table does not have
+stays as it is, and the check reports it. A fragment rides along:
+`page:uses#Camera` looks up `page:uses` and appends `#Camera`, and the check then
+verifies the fragment like any other.
 
-You have to descend into `Link.content`, because
-`posts/composable-sftp-streams.dj:205` nests an image inside a link.
+One thing jot does that you need to know: `references` is not empty even though
+no document defines a single `[id]: url` line. `jot.parse` seeds it with an
+anchor per heading, which is why the lone `[Homex][]` resolves today. A heading
+would have to be literally titled `page:uses` to collide, but if one ever is, the
+heading wins inside jot. The check catches it, because the URL is then a fragment
+and not the page.
 
-And `references` is not empty even though no document defines a single
-`[id]: url` line. `jot.parse` seeds it with an auto-generated anchor per heading.
-That is why the lone reference link `[Homex][]` already resolves today. So when
-you inject route keys, a collision with a heading anchor must be an error rather
-than a silent overwrite.
+**The check.**
 
-Classify destinations before checking them. Anything with a scheme is left alone
-and never fetched. A bare `#frag` checks against the current document's heading
-ids. A `/path#frag` canonicalizes the path, checks it against targets, then
-checks the fragment against the target document's heading ids, which works
-because everything is parsed by the time validation runs.
+```gleam
+pub fn links(site: Site, outputs: List(Output)) -> List(Problem)
+```
+
+For every authored page, take `extract.links(content.document)`. Chapter 9's fold
+already walks footnote bodies and the image nested inside a link at
+`posts/composable-sftp-streams.dj:205`, so nothing here has to know about them.
+Then classify each link:
+
+- A leftover `page:` or `post:` key is an `UnknownPage`. Check this first,
+  because `uri.parse` reads `page:` as a scheme.
+- Anything else with a scheme (`https:`, `mailto:`) is left alone and never fetched.
+- A bare `#frag` checks against `extract.headings` of the same document.
+- Anything else is resolved against the page's own URL, the same `uri.merge` as
+  `absolutize`, and must equal the `path.href` of some output. If the path is
+  right but the fragment is not among that page's heading ids, it is a
+  `MissingFragment`.
+- A path that misses, but would hit with a trailing slash added or with `.html`
+  or `/index.html` removed, is a `NotCanonical` with the right spelling in the
+  error. That is the redirect rule above, done by the build.
+
+The issues join chapter 11's type: `BrokenLink(url)`, `NotCanonical(url, use:)`,
+`MissingFragment(url)`, `UnknownPage(key)`. `Problem.file` is the page's source
+path, so errors come out by file and destination. jot has no positions, so line
+numbers are not available.
+
+`main` gains one step between generating and writing:
+
+```gleam
+let outputs = list.flat_map(generators, fn(generate) { generate(site) })
+case check.links(site, outputs) {
+  [] -> list.each(outputs, output.write(out_dir, _))
+  problems -> problem.exit(problems)
+}
+```
+
+Links the Gleam code writes are not checked here, and do not need to be. The nav
+and footer look up their pages (chapter 10), and Home's links come from
+`site.path` of pages that exist.
 
 ### Check it
 
@@ -1521,7 +2044,11 @@ would have failed it.
 
 So prove it works by breaking things on purpose, one at a time, and confirming
 each is caught: a mistyped image path, an unknown reference key, a renamed slug
-with a stale link pointing at it, a fragment that does not exist.
+with a stale link pointing at it, a fragment that does not exist, and
+`[x][page:nope]`.
+
+Then convert one real link to a typed one, say `/uses/#Camera` in `pages/now.dj`
+to `[...][page:uses#Camera]`, and check that the output is byte-identical.
 
 Then put back exactly the two you fixed in chapter 2, `/contact.html` and
 `/uses#Camera`, and check that both are rejected with the canonical spelling in
@@ -1530,7 +2057,7 @@ the error. That is the rule above doing its job: Caddy answers both with a clean
 
 ---
 
-## Chapter 10: Clean up and lock it down
+## Chapter 13: Clean up and lock it down
 
 ### The problem
 
@@ -1539,20 +2066,31 @@ nothing else.
 
 ### The idea
 
-`route.gleam` is the module most worth testing and the easiest to test, now that
-it has total constructors and no I/O. It is also the module everything else
-depends on being right.
+Everything after `discover` is now a pure function over plain data, which makes
+it easy to test. A test can build a `Site` by hand, with no disk and no git
+repository, and call anything. `path.gleam` is still the module most worth
+testing, because everything else depends on it being right. The djot passes come
+second, because chapter 12 trusts the folds to reach every node.
 
 ### The work
 
-Delete what is left of the old structure: `page.gleam`, `index.gleam`,
-`build.gleam`, and `render.gleam` if chapter 6 did not already take it.
+Delete what is left of the old structure: `route.gleam`, `content.gleam`,
+`TODO2.md` (chapter 10 did what it describes), and any module that only
+re-exports something that moved.
 
-Write `test/route_test.gleam`. Cover `canonicalize` for both kinds, `target` and
-`asset` round-tripping through `rel_string`, and `fs_rel_path` for nested slugs
-like `posts/some-post`. `target` is the one to be thorough with, since it is now
-the only thing that picks a kind: `Document` comes back with a trailing slash,
-and `OgImage`, `Feed` and `Sitemap` must not.
+Write `test/path_test.gleam`. `href` is the one to be thorough with, since it is
+the only thing that decides the URL shape: a `directory` comes back with a
+trailing slash, and a `file`, `feed` or `sitemap` must not. Cover `on_disk` for
+nested pages like `posts/some-post`, `card` for Home (`/images/og/index.png`) and
+for an article, and `url` keeping the trailing slash.
+
+Write `test/djot_test.gleam`. `fold_inlines` reaches a link inside a footnote and
+an image inside a link. `absolutize` turns `/contact/` into an absolute URL that
+still ends in a slash. `resolve` fills in `page:` keys and keeps the fragment.
+
+Write `test/check_test.gleam` against a two-page `Site` built in the test: a good
+link passes, and a broken link, a non-canonical link and a missing fragment each
+come back as the right `Issue`.
 
 Then check the dead API surface that accumulated: `git.short_hash`,
 `typst.set_options`, and five unused helpers in `opengraph.gleam`
@@ -1575,16 +2113,51 @@ Walk the final diff one last time. Every difference should be a fix you can name
 
 | Was | Is |
 | --- | --- |
-| `build.gleam` | `blog.gleam`, the pipeline |
-| `page.gleam` | split: `content.gleam`, `site.gleam`, `view/article.gleam` |
-| `index.gleam` | `view/home.gleam`, returning a `Computed` body |
-| `djot.gleam` | `djot/render.gleam`, a two-field visitor, plus `djot/html.gleam`, the standard rendering |
+| `build.gleam` | stays, the pipeline: config, discover, generate, check, write |
+| `page.gleam` | split: `site.gleam` (the model), `discover.gleam` (reading), `view/content.gleam` (rendering) |
+| `content.gleam` | folded into `site.gleam` |
+| `site.gleam`'s rendering half | `view/content.gleam` and `view/prose.gleam` |
+| `index.gleam`, `home.gleam` | `view/home.gleam`, an arm of `view/page.render` |
+| `layout.gleam` | `view/layout.gleam`, nav links looked up by slug |
+| `djot.gleam`, `djot/render.gleam` | `djot/document`, `parse`, `extract`, `transform`, `html` |
 | `render.gleam` | deleted, it was dead |
-| `helper.gleam` | `view/components.gleam`, or a `date` module |
-| `component.gleam` | `view/components.gleam`, XML bits move to the generators |
-| `sitemap.gleam`, `feed.gleam` | `generate/`, as `fn(Site, Targets) -> List(Output)` |
-| `atom.gleam`, `opengraph.gleam` | `vendor/`, unchanged |
-| `route.gleam` | stays, plus `Route`, `Target` and total constructors |
+| `helper.gleam`, `component.gleam` | `view/components.gleam`, XML bits move to the generators |
+| `sitemap.gleam`, `feed.gleam` | `generate/`, as `fn(Site) -> List(Output)` |
+| `atom.gleam`, `opengraph.gleam`, `typst.gleam` | `vendor/`, unchanged |
+| `route.gleam` | `path.gleam`: one opaque `Path`, the URL computed by `site.path(page)` |
+| `drafts/` | `draft = true` in frontmatter |
+
+The types, all of them:
+
+| Type | What it is |
+| --- | --- |
+| `Site` | Everything the build reads: config, pages, assets, card template. No markup, no I/O. |
+| `Page` | Anything served as HTML. The variant is the kind: `Home`, `Article`, `Standalone`. |
+| `Content` | Everything that came from one source file: slug, meta, source, document. |
+| `Meta` | Title and description. |
+| `Source`, `Revision` | The file and what git knows about it, resolved once. |
+| `Path` | Where any output lives. Directory or file is hidden inside. |
+| `Output` | A path and its contents. |
+| `Document` | The parsed djot tree. |
+| `Problem` | Anything the build refuses, with the file it came from. |
+
+## Page kinds you can add later
+
+Each one is a `Page` variant and a line in `site.path`. The compiler then points
+at the view dispatch, `site.meta` and anything else that matches on pages.
+Generated kinds also need a line in `discover` that creates them. Authored kinds
+carry a `Content`, generated ones do not, which is the whole reason `Content`
+exists.
+
+| Kind | Authored or generated | Notes |
+| --- | --- | --- |
+| `TagIndex` (all tags) / `Tag(name)` (one tag's posts) | generated | Hugo's `taxonomy` and `term` kinds. `tags` goes on `Article`. |
+| `Archive(year)` or a `/posts/` listing | generated | Hugo's `section` kind |
+| `Note` / TIL | authored, dated | A second dated collection, short, maybe outside the main feed |
+| `Project` / `Talk` | authored | Kind-specific fields (repo URL, event, slides) go on the variant |
+| `Series(name)` | generated | Groups multi-part articles |
+| `NotFound` | generated | Served as `/404.html`, a file rather than a directory, which `site.path` handles |
+| Redirect / alias | generated | Not a page, an old address pointing at one. See the third idea below. |
 
 ## One thing deliberately left out
 
@@ -1691,27 +2264,26 @@ nothing else in the book changes.
 
 ---
 
-## Two ideas for after the book, not during it
+## Three ideas for after the book, not during it
 
-Both came up while chapter 6 was fresh, both touch the same resolve/render
-split that chapter just finished, and neither should be designed until the
-rest of the chapters are. Revisit once chapters 7 through 10 are done, since
-chapter 8's `Output`/`Target` set and chapter 9's validator are exactly the
-things either idea would plug into.
+The first two came up while chapter 6 was fresh. Both touch the same
+resolve/render split, and neither should be designed until the rest of the
+chapters are. Revisit once chapters 9 through 13 are done, since chapter 9's
+transforms, the output set and chapter 12's check are exactly the things either
+idea would plug into. The third came up while designing chapter 10's page kinds.
 
 **Local image paths that work in a markdown previewer.** The want: write
 `![](../images/foo.jpg)` in a djot source file, have a local markdown viewer
 resolve it as a plain relative path, and have the build copy the file into its
 output location and rewrite the URL to the site path. The image case is the
-easier of the two, because a URL is still a URL: `jot.Image`'s destination can
-be rewritten in place, as a pre-pass over the parsed `jot.Document` that runs
-before `render.document` ever sees it, so `djot/render` never has to know
-images can come from disk.
+easier of the two, because a URL is still a URL: an `Image`'s `url` can be
+rewritten in place by a chapter 9 transform that runs in `discover`, so
+`djot/html` never has to know images can come from disk.
 
 The one trap worth remembering by the time this gets built: the pre-pass
 produces two facts about the same file, the rewritten URL and the `Output`
 that copies it, and those must come from one function, not two. Build both
-from the same underlying `route.Rel` value in a single call
+from the same underlying `path.Path` value in a single call
 (`resolve_local_image(src_path, dest) -> #(String, output.Output)`) rather
 than computing a URL string in one place and an `Output.path` in another.
 That is the same bug chapter 6 hit with the footnote ref/entry ids agreeing by
@@ -1721,27 +2293,57 @@ luck instead of by construction, wearing a different hat.
 time, with their result spliced in below the block. This one is not a small
 extension of the image idea, because of a constraint chapter 4 already argued
 for at length: rendering must stay a pure function from a value to markup.
-`render.render(doc, renderer)` currently resolves the document fresh on every
-call, and `site.gleam` calls it twice per page, once for the browser and once
-for the feed. References and footnotes tolerate that because resolving them
-twice gives the same answer both times with no side effects. Running a code
-block twice does not: it is slow, and if the code is not perfectly
-deterministic, the browser and the feed could end up showing different output
-for the same block. That is the `git_hash`-inside-`common()` bug from chapter
-4, recurring for something far more expensive than a shell call.
+Running code is I/O, so it belongs in `discover` and nowhere later. Running a
+block twice is slow, and if the code is not perfectly deterministic the browser
+and the feed could show different output for the same block. That is the
+`git_hash`-inside-`common()` bug from chapter 4, recurring for something far
+more expensive than a shell call.
 
-So this one pushes further than the image idea does: `render.document` (resolve,
-run once) and `render.blocks` (dispatch, run once per output) would need to be
-called separately from `site.gleam`, with the same resolved `List(Container)`
-handed to both a browser `Context` and a feed `Context`, rather than letting
-`render.render` do both steps together on every call. And because a captured
-result is a fact `jot.Codeblock` has no field for, it cannot be smuggled in as
-a `jot.Document` rewrite the way an image URL can; it has to become a new
-field on `render.gleam`'s own `Codeblock`, populated during `document`'s
-resolve walk.
+Chapter 9 already removed the main obstacle: the document is parsed once and
+stored on the page, and both outputs render that same value. What remains is
+that a captured result is a fact `Codeblock` has no field for. It becomes a new
+field on `djot/document`'s own `Codeblock`, filled in by a step in `discover`
+that runs each marked block once, after parsing and before anything renders.
 
-Neither idea is designed yet. Before building either: decide whether the
-image pre-pass's `Output`s get folded into whatever chapter 8 ends up calling
-the site's full output set, and decide how execution results get cached so an
-unrelated build does not re-run every executable block, and what renders when
-one fails.
+Neither idea is designed yet. Before building either: decide how the image
+pass's copy outputs reach the generators (probably a field on `Content`), and
+decide how execution results get cached so an unrelated build does not re-run
+every executable block, and what renders when one fails.
+
+**Owning the server config.** Today `Caddyfile`, `caddy/blog.part` and
+`caddy/blog.Caddyfile` are written by hand, and the two `.html` regex redirects
+in `blog.part` encode the site's URL scheme a second time, in a second
+language. The build already knows every path and every old address, so it can
+write the server config itself. Four pieces, which belong together:
+
+- **A `NotFound` page.** A `Page` variant whose `site.path` is
+  `path.file(["404.html"])`. It renders through the normal layout, with no card,
+  no canonical link, no sitemap entry and `noindex`. Each of those is a `case`
+  over pages, so the compiler asks.
+- **Redirects as data.** `Redirect(from: Path, to: Path)`, from
+  `site.redirects(site)`: each page's legacy `.html` address, plus any
+  `aliases = [...]` in frontmatter for renamed slugs, which is how Zola and Hugo
+  do it. Redirects are not outputs, since they write no file. Three things read
+  the list: the Caddy emitter, chapter 12's check (a link to a redirect source
+  gets the target in its error) and the duplicate path check.
+- **The environment as a type.** `Env = Development | Production`, and
+  `config(env)` gives the base URL, whether drafts are shown, the server root
+  (`./dist/public` or `/static/blog`) and extra imports (`badpaths` in
+  production only). Caddy accepts a URL as a site address, so the canonical URLs
+  and the server address cannot disagree. `SITE_URL` goes.
+- **A generated Caddyfile.** `caddy.config(config, redirects) -> String`, written
+  to `dist/caddy/blog.Caddyfile`, outside the served folder. It contains the
+  site address, root, `encode`, the cache and `.livemd` headers as constants, one
+  `redir ... 308` per redirect (real server-side redirects, which Google prefers
+  over meta refresh), a `handle_errors 404` block and `file_server`. The
+  `/x/index.html` redirects can be emitted per page the same way, with no regex.
+  `priv/` becomes `dist/public/`, `just deploy` rsyncs both folders, and
+  `just dev` runs `caddy run --config dist/caddy/blog.Caddyfile`. All three
+  hand-written Caddy files are deleted.
+
+Run `caddy validate --config dist/caddy/blog.Caddyfile` in `just build`, so a
+broken config fails locally rather than on the server. Chapter 11 already
+restricts slugs to `[a-z0-9-]`, so nothing in the generated file needs escaping.
+This deliberately ties the generator to Caddy. If you ever move to Netlify or
+Cloudflare, you write a `_redirects` emitter from the same list, and nothing
+else changes.

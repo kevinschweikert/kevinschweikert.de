@@ -19,11 +19,10 @@ import lustre/attribute
 import lustre/element
 import lustre/element/html
 import route.{type Route}
-import simplifile
 import tom
 
 pub type Site {
-  Site(config: config.Config, pages: List(Page))
+  Site(config: config.Config, pages: List(Page), assets: List(Asset))
 }
 
 pub type Page {
@@ -36,6 +35,10 @@ pub type Page {
   )
 }
 
+pub type Asset {
+  Asset(source: String, path: String)
+}
+
 pub type Body {
   Djot(jot.Document)
   Computed(fn(Site) -> List(element.Element(Nil)))
@@ -45,43 +48,25 @@ pub type Meta {
   Meta(title: String, description: String)
 }
 
-pub fn from_folder(path: String, to_route: fn(String) -> Route) -> List(Page) {
-  let files = case simplifile.read_directory(path) {
-    Ok(files) -> files
-    Error(simplifile.Enoent) -> []
-    Error(_) -> panic
-  }
-  let files =
-    list.filter(files, fn(filename) {
-      filename
-      |> filepath.join(path, _)
-      |> simplifile.is_file()
-      |> result.unwrap(False)
-    })
-
-  use filename <- list.map(files)
-
-  let assert Ok(content) =
-    filename
-    |> filepath.join(path, _)
-    |> simplifile.read()
-
-  let frontmatter.Extracted(frontmatter:, content:) =
-    frontmatter.extract(content)
+pub fn parse(
+  path: String,
+  text: String,
+  source: content.Source,
+  to_route: fn(String) -> Route,
+) -> Page {
+  let frontmatter.Extracted(frontmatter:, content:) = frontmatter.extract(text)
 
   let #(published, meta) = extract_meta(frontmatter)
-  let full_path = filepath.join(path, filename)
-  let source = content.source(full_path)
-  let body = case filepath.extension(filename) {
+  let body = case filepath.extension(path) {
     Ok("dj") | Ok("djot") -> Djot(jot.parse(content))
     Ok(_) -> panic as "filetype not supported"
     Error(_) -> panic
   }
 
-  let slug = filename |> filepath.base_name |> filepath.strip_extension()
+  let slug = path |> filepath.base_name |> filepath.strip_extension()
   let route = to_route(slug)
 
-  Page(published:, meta:, body:, source:, route:)
+  Page(published:, meta:, body:, source: option.Some(source), route:)
 }
 
 fn extract_meta(frontmatter: option.Option(String)) -> #(calendar.Date, Meta) {
@@ -107,6 +92,10 @@ pub fn updated_date(page: Page) -> option.Option(calendar.Date) {
 
 pub fn rel_path(page: Page) -> route.Rel {
   route.of(page.route)
+}
+
+pub fn asset_rel(asset: Asset) -> route.Rel {
+  route.asset(asset.path)
 }
 
 pub fn abs_path(page: Page, base: uri.Uri) -> route.Abs {

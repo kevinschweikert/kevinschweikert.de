@@ -5,6 +5,7 @@ import simplifile
 pub type Contents {
   Text(String)
   Bytes(BitArray)
+  Copy(from: String)
 }
 
 pub type Output {
@@ -20,6 +21,7 @@ pub fn write(to out_dir: String, output output: Output) -> Nil {
   let assert Ok(Nil) = case output.contents {
     Text(contents) -> simplifile.write(contents:, to: path)
     Bytes(bits) -> simplifile.write_bits(bits:, to: path)
+    Copy(from) -> simplifile.copy_file(at: from, to: path)
   }
 
   Nil

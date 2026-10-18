@@ -1,3 +1,4 @@
+import content
 import gleam/result
 import gleam/string
 import gleam/time/calendar
@@ -13,6 +14,12 @@ pub type Error {
   BadOutput(String)
 }
 
+pub fn revision(path: String) -> Result(content.Revision, Error) {
+  use hash <- result.try(full_hash(path))
+  use changed_at <- result.map(last_changed_at(path))
+  content.Revision(hash:, changed_at:)
+}
+
 pub fn full_hash(filepath: String) -> Result(String, Error) {
   run(with: ["rev-list", "-1", "HEAD", "--", filepath])
 }
@@ -25,7 +32,7 @@ fn last_change(filepath: String) -> Result(String, Error) {
   run(with: ["log", "-1", "--format=%cI", "--", filepath])
 }
 
-pub fn last_changed_at(filepath: String) -> Result(calendar.Date, Error) {
+fn last_changed_at(filepath: String) -> Result(calendar.Date, Error) {
   use output <- result.try(last_change(filepath))
   use ts <- result.try(
     timestamp.parse_rfc3339(output)

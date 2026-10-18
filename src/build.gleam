@@ -1,26 +1,30 @@
-import component
 import config
 import content
 import envoy
-import feed
+import filepath
+import generate/assets
+import generate/feed
+import generate/og_image
+import generate/pages
+import generate/sitemap
+import git
 import gleam/list
+import gleam/option
 import gleam/result
+import gleam/string
 import gleam/time/calendar
 import gleam/time/duration
 import gleam/time/timestamp
 import gleam/uri
-import helper
 import home
-import layout
-import lustre/element
-import output.{Bytes, Output, Text}
+import output
 import route
 import simplifile
 import site
-import sitemap
-import typst
 
 const out_dir: String = "./priv"
+
+const assets_path = "./assets"
 
 const pages_path: String = "./pages"
 
@@ -31,6 +35,42 @@ const drafts_path: String = "./drafts"
 const home_path: String = "./src/home.gleam"
 
 const typst_template_path: String = "./src/template.typ"
+
+fn paths(site: site.Site) -> List(route.Rel) {
+  [route.Feed, route.Sitemap]
+  |> list.append({
+    use page <- list.flat_map(site.pages)
+    [route.Document(page.route), route.OgImage(page.route)]
+  })
+  |> list.map(route.target)
+  |> list.append(list.map(site.assets, site.asset_rel))
+}
+
+fn files(dir: String) -> List(site.Asset) {
+  let assert Ok(files) = simplifile.get_files(dir)
+  use file <- list.map(files)
+  site.Asset(source: file, path: string.remove_prefix(file, dir))
+}
+
+fn read_pages(
+  dir: String,
+  to_route: fn(String) -> route.Route,
+) -> List(site.Page) {
+  let files = case simplifile.read_directory(dir) {
+    Ok(files) -> files
+    Error(simplifile.Enoent) -> []
+    Error(_) -> panic
+  }
+  use path <- list.filter_map(files)
+  let path = filepath.join(dir, path)
+  use text <- result.map(simplifile.read(path))
+  site.parse(
+    path,
+    text,
+    content.Source(path:, revision: git.revision(path) |> option.from_result()),
+    to_route,
+  )
+}
 
 pub fn main() -> #(Int, duration.Unit) {
   let start = timestamp.system_time()
@@ -58,76 +98,41 @@ pub fn main() -> #(Int, duration.Unit) {
     Error(_) -> panic
   }
 
-  let assert Ok(_) = simplifile.copy_directory("./assets", out_dir)
-
   let drafts = case show_drafts {
-    True -> site.from_folder(drafts_path, route.Article)
+    True -> read_pages(drafts_path, route.Article)
     False -> []
   }
-
-  let content_pages =
-    post_path
-    |> site.from_folder(route.Article)
-    |> list.append(drafts)
-    |> list.append(site.from_folder(pages_path, route.Standalone))
+  let articles = post_path |> read_pages(route.Article)
+  let standalones = pages_path |> read_pages(route.Standalone)
 
   let home =
     site.Page(
       route: route.Home,
       published: calendar.Date(2026, calendar.January, 18),
-      source: content.source(home_path),
+      source: option.Some(content.Source(
+        path: home_path,
+        revision: git.revision(home_path) |> option.from_result(),
+      )),
       body: site.Computed(home.view),
       meta: site.Meta(title: config.title, description: config.description),
     )
+  let assert Ok(template) = simplifile.read(typst_template_path)
 
-  let site = site.Site(config:, pages: [home, ..content_pages])
+  let pages = [[home], drafts, articles, standalones] |> list.flatten()
+  let assets = files(assets_path)
+  let site = site.Site(config:, pages:, assets:)
+  let paths = paths(site)
 
-  site.pages
-  |> list.map(fn(page) {
-    create_page(site.rel_path(page), layout.root(page, site))
-  })
-
-  site
-  |> sitemap.build()
-  |> component.to_xml_docstring()
-  |> Text()
-  |> Output(path: route.target(route.Sitemap), contents: _)
-  |> output.write(out_dir, _)
-
-  site
-  |> feed.build()
-  |> component.to_xml_docstring()
-  |> Text()
-  |> Output(path: route.target(route.Feed), contents: _)
-  |> output.write(out_dir, _)
-
-  let assert Ok(markup) = simplifile.read(typst_template_path)
-
-  site.pages
-  |> list.each(create_image(markup, _, config))
+  [
+    pages.generate,
+    assets.generate,
+    sitemap.generate,
+    feed.generate,
+    og_image.generate(template),
+  ]
+  |> list.flat_map(fn(generate) { generate(site, paths) })
+  |> list.each(fn(output) { output.write(out_dir, output) })
 
   let end = timestamp.system_time()
-
   timestamp.difference(start, end) |> duration.approximate() |> echo
-}
-
-fn create_page(path: route.Rel, element: element.Element(a)) -> Nil {
-  Output(path:, contents: Text(element.to_document_string(element)))
-  |> output.write(out_dir, _)
-}
-
-fn create_image(markup: String, page: site.Page, config: config.Config) -> Nil {
-  let assert Ok(png) =
-    typst.new(markup)
-    |> typst.add_binding("title", page.meta.title)
-    |> typst.add_binding("description", page.meta.description)
-    |> typst.add_binding(
-      "date",
-      page.published |> helper.date_to_humanized_string(),
-    )
-    |> typst.add_binding("domain", config.domain(config))
-    |> typst.render()
-
-  Output(path: route.og_image(page.route), contents: Bytes(png))
-  |> output.write(out_dir, _)
 }
