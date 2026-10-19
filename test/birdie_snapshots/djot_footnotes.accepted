@@ -1,0 +1,10 @@
+---
+version: 2.0.2
+title: djot footnotes
+file: ./test/blog_test.gleam
+test_name: djot_footnotes_test
+---
+<!doctype html>
+<html><body><!-- lustre:fragment --><p>Second<sup><a href="#fn-zebra" id="fnref-zebra">1</a></sup> and third<sup><a href="#fn-apple" id="fnref-apple">2</a></sup>.</p><section role="doc-endnotes"><ol><li id="fn-zebra"><p>Referenced first, sorts last.
+ <a href="#fnref-zebra" role="doc-backlink">↩</a></p></li><li id="fn-apple"><p>Referenced second, sorts first.
+ <a href="#fnref-apple" role="doc-backlink">↩</a></p></li></ol></section><!-- /lustre:fragment --></body></html>

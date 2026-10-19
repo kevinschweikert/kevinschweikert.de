@@ -1,20 +1,21 @@
 import component
 import config.{type Config}
 import content.{Revision}
+import djot/document
+import djot/extract
 import djot/html as djot_html
-import djot/render
+import djot/parse
+import djot/transform
 import filepath
 import frontmatter
 import gleam/dict
 import gleam/io
 import gleam/list
 import gleam/option
-import gleam/result
 import gleam/string
 import gleam/time/calendar
 import gleam/uri
 import glimra
-import jot
 import lustre/attribute
 import lustre/element
 import lustre/element/html
@@ -40,7 +41,7 @@ pub type Asset {
 }
 
 pub type Body {
-  Djot(jot.Document)
+  Djot(document.Document)
   Computed(fn(Site) -> List(element.Element(Nil)))
 }
 
@@ -58,7 +59,7 @@ pub fn parse(
 
   let #(published, meta) = extract_meta(frontmatter)
   let body = case filepath.extension(path) {
-    Ok("dj") | Ok("djot") -> Djot(jot.parse(content))
+    Ok("dj") | Ok("djot") -> Djot(parse.parse(content))
     Ok(_) -> panic as "filetype not supported"
     Error(_) -> panic
   }
@@ -159,7 +160,9 @@ pub fn to_minimal_elements(
 
 fn render(page: Page, site: Site) -> List(element.Element(Nil)) {
   case page.body {
-    Djot(document) -> render.render(document, browser())
+    Djot(document) ->
+      document
+      |> djot_html.render(browser())
     Computed(view) -> view(site)
   }
 }
@@ -168,23 +171,26 @@ fn render_minimal(page: Page, site: Site) -> List(element.Element(Nil)) {
   let page_uri =
     route.of(page.route) |> route.abs(on: site.config.base) |> route.abs_uri()
   case page.body {
-    Djot(document) -> render.render(document, feed(page_uri))
+    Djot(document) ->
+      document
+      |> transform.absolute_urls(page_uri)
+      |> djot_html.render(djot_html.standard())
     Computed(view) -> view(site)
   }
 }
 
-fn browser() -> render.Renderer {
-  render.Renderer(
-    container: fn(node, ctx) {
+fn browser() -> djot_html.Renderer {
+  djot_html.Renderer(
+    block: fn(node, ctx) {
       case node {
-        render.Codeblock(attributes:, language:, content:) ->
-          highlight(attributes, language, content)
-        _ -> djot_html.container(node, ctx)
+        document.Codeblock(attributes:, language:, code:) ->
+          highlight(attributes, language, code)
+        _ -> djot_html.block(node, ctx)
       }
     },
     inline: fn(node, ctx) {
       case node {
-        render.Image(attributes:, content:, url:) ->
+        document.Image(attributes:, content:, url:) ->
           figure(attributes, content, url)
         _ -> djot_html.inline(node, ctx)
       }
@@ -192,51 +198,12 @@ fn browser() -> render.Renderer {
   )
 }
 
-fn feed(page: uri.Uri) -> render.Renderer {
-  render.Renderer(container: djot_html.container, inline: fn(node, ctx) {
-    node
-    |> absolutize(page)
-    |> djot_html.inline(ctx)
-  })
-}
-
-fn absolutize(node: render.Inline, page: uri.Uri) -> render.Inline {
-  case node {
-    render.Link(attributes:, content:, url:) -> {
-      let absolute = url |> absolute(page)
-      render.Link(attributes:, content:, url: absolute)
-    }
-    render.Image(attributes:, content:, url:) -> {
-      let absolute = url |> absolute(page)
-      render.Image(attributes:, content:, url: absolute)
-    }
-    _ -> node
-  }
-}
-
-// uri.merge discards a trailing slash but our canonical representation wants it
-fn absolute(url: String, page: uri.Uri) -> String {
-  {
-    use parsed <- result.try(uri.parse(url))
-    use merged <- result.try(uri.merge(page, parsed))
-    let path = case
-      string.ends_with(parsed.path, "/") && !string.ends_with(merged.path, "/")
-    {
-      True -> merged.path <> "/"
-      _ -> merged.path
-    }
-
-    Ok(uri.to_string(uri.Uri(..merged, path:)))
-  }
-  |> result.unwrap(url)
-}
-
 fn figure(
   attributes: dict.Dict(String, String),
-  content: List(render.Inline),
+  content: List(document.Inline),
   url: String,
 ) -> element.Element(Nil) {
-  let alt = djot_html.text_content(content)
+  let alt = extract.text(content)
   let attributes = djot_html.to_attributes(attributes)
   html.figure([], [
     html.img([attribute.src(url), attribute.alt(alt), ..attributes]),
