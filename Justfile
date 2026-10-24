@@ -6,7 +6,7 @@ build: tailwind
 
 dev:
     npm run build
-    BLOG_ENV=dev gleam run -m build
+    BLOG_ENV=dev SITE_URL=http://localhost:8080 gleam run -m build
 
 watch:
     find src/ assets/ -type f | entr -d just dev

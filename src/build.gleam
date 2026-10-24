@@ -1,43 +1,92 @@
-import component
 import config
+import content
 import envoy
-import feed
 import filepath
+import generate/assets
+import generate/feed
+import generate/og_image
+import generate/pages
+import generate/sitemap
+import git
 import gleam/list
 import gleam/option
 import gleam/result
+import gleam/string
 import gleam/time/calendar
 import gleam/time/duration
 import gleam/time/timestamp
-import helper
-import index
-import layout
-import lustre/element
-import page
+import gleam/uri
+import home
+import output
 import route
 import simplifile
-import sitemap
-import typst
+import site
 
-const out_dir = "./priv"
+const out_dir: String = "./priv"
 
-const pages_path = "./pages"
+const assets_path = "./assets"
 
-const post_path = "./posts"
+const pages_path: String = "./pages"
 
-const drafts_path = "./drafts"
+const post_path: String = "./posts"
 
-const index_path = "./src/index.gleam"
+const drafts_path: String = "./drafts"
 
-const typst_template_path = "./src/template.typ"
+const home_path: String = "./src/home.gleam"
 
-pub fn main() {
+const typst_template_path: String = "./src/template.typ"
+
+fn paths(site: site.Site) -> List(route.Rel) {
+  [route.Feed, route.Sitemap]
+  |> list.append({
+    use page <- list.flat_map(site.pages)
+    [route.Document(page.route), route.OgImage(page.route)]
+  })
+  |> list.map(route.target)
+  |> list.append(list.map(site.assets, site.asset_rel))
+}
+
+fn files(dir: String) -> List(site.Asset) {
+  let assert Ok(files) = simplifile.get_files(dir)
+  use file <- list.map(files)
+  site.Asset(source: file, path: string.remove_prefix(file, dir))
+}
+
+fn read_pages(
+  dir: String,
+  to_route: fn(String) -> route.Route,
+) -> List(site.Page) {
+  let files = case simplifile.read_directory(dir) {
+    Ok(files) -> files
+    Error(simplifile.Enoent) -> []
+    Error(_) -> panic
+  }
+  use path <- list.filter_map(files)
+  let path = filepath.join(dir, path)
+  use text <- result.map(simplifile.read(path))
+  site.parse(
+    path,
+    text,
+    content.Source(path:, revision: git.revision(path) |> option.from_result()),
+    to_route,
+  )
+}
+
+pub fn main() -> #(Int, duration.Unit) {
   let start = timestamp.system_time()
 
   let blog_env = envoy.get("BLOG_ENV") |> result.unwrap("PROD")
   let show_drafts = case blog_env {
     "PROD" | "prod" -> False
     _ -> True
+  }
+
+  let config = case envoy.get("SITE_URL") {
+    Ok(url) -> {
+      let assert Ok(base) = uri.parse(url)
+      config.Config(..config.default(), base:)
+    }
+    Error(_) -> config.default()
   }
 
   case simplifile.is_directory(out_dir) {
@@ -49,105 +98,41 @@ pub fn main() {
     Error(_) -> panic
   }
 
-  let assert Ok(_) = simplifile.copy_directory("./assets", out_dir)
-
   let drafts = case show_drafts {
-    True -> page.from_folder(drafts_path, fn(slug) { page.Article(slug) })
+    True -> read_pages(drafts_path, route.Article)
     False -> []
   }
+  let articles = post_path |> read_pages(route.Article)
+  let standalones = pages_path |> read_pages(route.Standalone)
 
-  let posts =
-    post_path
-    |> page.from_folder(fn(slug) { page.Article(slug) })
-    |> list.append(drafts)
-
-  let pages = page.from_folder(pages_path, fn(slug) { page.Site(slug) })
-
-  let index =
-    page.Page(
-      route: page.Home,
+  let home =
+    site.Page(
+      route: route.Home,
       published: calendar.Date(2026, calendar.January, 18),
-      src: page.Elements(
-        index.view(posts),
-        origin_path: option.Some(index_path),
-      ),
-      meta: page.Meta(
-        title: index.title,
-        description: index.description,
-        image: page.Generated,
-        author: config.author(),
-      ),
+      source: option.Some(content.Source(
+        path: home_path,
+        revision: git.revision(home_path) |> option.from_result(),
+      )),
+      body: site.Computed(home.view),
+      meta: site.Meta(title: config.title, description: config.description),
     )
+  let assert Ok(template) = simplifile.read(typst_template_path)
 
-  create_page(page.rel_path(index), layout.root(index))
+  let pages = [[home], drafts, articles, standalones] |> list.flatten()
+  let assets = files(assets_path)
+  let site = site.Site(config:, pages:, assets:)
+  let paths = paths(site)
 
-  list.each(pages, fn(page) {
-    create_page(page.rel_path(page), layout.root(page))
-  })
-  list.each(posts, fn(page) {
-    create_page(page.rel_path(page), layout.root(page))
-  })
-
-  [index]
-  |> list.append(pages)
-  |> list.append(posts)
-  |> list.map(page.to_sitemap_item)
-  |> sitemap.build()
-  |> component.to_xml_docstring()
-  |> write_file(filepath.join(out_dir, "sitemap.xml"), _)
-
-  posts
-  |> list.filter_map(page.to_feed_item)
-  |> feed.build()
-  |> component.to_xml_docstring()
-  |> write_file(filepath.join(out_dir, "feed.xml"), _)
-
-  let assert Ok(markup) = simplifile.read(typst_template_path)
-
-  [index]
-  |> list.append(pages)
-  |> list.append(posts)
-  |> list.each(create_image(markup, _))
+  [
+    pages.generate,
+    assets.generate,
+    sitemap.generate,
+    feed.generate,
+    og_image.generate(template),
+  ]
+  |> list.flat_map(fn(generate) { generate(site, paths) })
+  |> list.each(fn(output) { output.write(out_dir, output) })
 
   let end = timestamp.system_time()
-
   timestamp.difference(start, end) |> duration.approximate() |> echo
-}
-
-fn create_page(path: route.Rel, element: element.Element(a)) -> Nil {
-  let path = route.fs_rel_path(path)
-
-  out_dir
-  |> filepath.join(path)
-  |> write_file(element.to_document_string(element))
-}
-
-fn create_image(markup: String, page: page.Page) {
-  case page.og_image_url(page) {
-    option.Some(rel) -> {
-      let assert Ok(png) =
-        typst.new(markup)
-        |> typst.add_binding("title", page.meta.title)
-        |> typst.add_binding("description", page.meta.description)
-        |> typst.add_binding(
-          "date",
-          page.published |> helper.date_to_humanized_string(),
-        )
-        |> typst.add_binding("domain", config.domain())
-        |> typst.render()
-
-      rel
-      |> route.fs_rel_path()
-      |> filepath.join(out_dir, _)
-      |> simplifile.write_bits(png)
-    }
-    option.None -> Ok(Nil)
-  }
-}
-
-fn write_file(to path: String, write contents: String) -> Nil {
-  let assert Ok(Nil) =
-    simplifile.create_directory_all(filepath.directory_name(path))
-  let assert Ok(Nil) = simplifile.write(contents, to: path)
-  Nil
 }
